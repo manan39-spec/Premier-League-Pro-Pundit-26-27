@@ -125,6 +125,18 @@
   .team-chip.selected { border-color: var(--accent); background: rgba(233,0,82,0.12); color: var(--accent); }
   .team-chip.used2 { opacity: 0.5; }
   .team-chip .uses { display: block; font-family: 'JetBrains Mono'; font-size: 9px; color: var(--ink-mute); letter-spacing: 0.1em; margin-top: 3px; }
+  .tbadge { display:inline-block; vertical-align:middle; object-fit:contain; }
+  .tbadge-fallback { display:inline-flex; align-items:center; justify-content:center; border-radius:50%; background:var(--bg-2); border:1px solid var(--line); color:var(--ink-dim); font-family:'JetBrains Mono'; font-weight:700; line-height:1; vertical-align:middle; }
+  .chip-badge { display:block; margin:0 auto 6px; }
+  .fixtures-list { display:flex; flex-direction:column; gap:10px; }
+  .fxrow { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:12px; padding:14px 16px; border:1px solid var(--line); border-radius:8px; background:var(--bg-2); }
+  .fxrow .side { display:flex; align-items:center; gap:10px; }
+  .fxrow .side.home { justify-content:flex-end; }
+  .fxrow .mid { text-align:center; font-family:'JetBrains Mono'; font-size:12px; color:var(--ink-mute); min-width:74px; }
+  .fxrow .mid .sc { font-size:18px; color:var(--ink); font-weight:700; letter-spacing:0.04em; }
+  .fxrow .tn { font-weight:600; font-size:14px; }
+  .fx-daygroup { margin-top:20px; }
+  .fx-dayhdr { font-family:'JetBrains Mono'; font-size:11px; letter-spacing:0.14em; color:var(--ink-mute); text-transform:uppercase; margin:0 0 10px; }
 
   .f4-slot { background: var(--bg-2); border: 1px solid var(--line); border-radius: 6px; padding: 16px; margin-bottom: 12px; }
   .f4-slot-title { font-family: 'Anton', sans-serif; font-size: 16px; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 10px; color: var(--accent-2); }
@@ -714,6 +726,7 @@ function App() {
         <nav className="nav">
           <button className={view==="home"?"active":""} onClick={()=>setView("home")}>Home</button>
           <button className={view==="predict"?"active":""} onClick={()=>setView("predict")}>Predict</button>
+          <button className={view==="fixtures"?"active":""} onClick={()=>setView("fixtures")}>Fixtures</button>
           <button className={view==="picks"?"active":""} onClick={()=>setView("picks")}>Picks</button>
           <button className={view==="leaderboard"?"active":""} onClick={()=>setView("leaderboard")}>Leaderboard</button>
           <button className={view==="rules"?"active":""} onClick={()=>setView("rules")}>Rules</button>
@@ -722,6 +735,7 @@ function App() {
 
         {view==="home" && <HomeView state={state} user={user} myPred={myPred} standings={standings} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} setView={setView} />}
         {view==="predict" && <PredictView state={state} myPred={myPred} users={users} fpl={fpl} updateMyPred={updateMyPred} showToast={showToast} />}
+        {view==="fixtures" && <FixturesView state={state} fpl={fpl} />}
         {view==="picks" && <PicksView state={state} users={users} currentUser={user} fpl={fpl} />}
         {view==="leaderboard" && <LeaderboardView standings={standings} currentUser={user} state={state} users={users} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} />}
         {view==="rules" && <RulesView state={state} />}
@@ -995,6 +1009,74 @@ function teamsPlayingInGW(fixtures) {
   (fixtures || []).forEach(f => { if (!set.includes(f.teamH)) set.push(f.teamH); if (!set.includes(f.teamA)) set.push(f.teamA); });
   return set.sort();
 }
+function opponentsInGW(fixtures, team) {
+  const out = [];
+  (fixtures || []).forEach(f => { if (f.teamH === team) out.push("vs " + f.teamA); else if (f.teamA === team) out.push("@ " + f.teamH); });
+  return out;
+}
+function teamCodeByShort(boot, short) {
+  if (!boot || !boot.teams) return null;
+  const t = Object.values(boot.teams).find(x => x.short === short);
+  return (t && t.code != null) ? t.code : null;
+}
+function fplBadgeUrl(code) { return (code == null) ? null : ("https://resources.premierleague.com/premierleague/badges/70/t" + code + ".png"); }
+// Club crest with a guaranteed text fallback — if the image can't load, shows the short code.
+function TeamBadge({ short, code, boot, size, className }) {
+  const s = size || 22;
+  const c = (code != null) ? code : teamCodeByShort(boot, short);
+  const [err, setErr] = useState(false);
+  const url = fplBadgeUrl(c);
+  if (!url || err) {
+    return <span className={"tbadge-fallback " + (className || "")} style={{ width:s, height:s, fontSize: Math.max(8, Math.round(s * 0.32)) }}>{(short || "").slice(0,3)}</span>;
+  }
+  return <img className={"tbadge " + (className || "")} src={url} alt={short || ""} width={s} height={s} onError={()=>setErr(true)} />;
+}
+
+function FixturesView({ state, fpl }) {
+  const gw = state.activeGW || 1;
+  const boot = fpl.boot;
+  const codeOf = (id, short) => (boot && boot.teams && boot.teams[id] && boot.teams[id].code != null) ? boot.teams[id].code : teamCodeByShort(boot, short);
+  const fixtures = ((fpl.fixturesByGW && fpl.fixturesByGW[gw]) || []).slice().sort((a,b) => {
+    const ka = a.kickoff ? new Date(a.kickoff).getTime() : 8.64e15;
+    const kb = b.kickoff ? new Date(b.kickoff).getTime() : 8.64e15;
+    return ka - kb;
+  });
+  const groups = {};
+  fixtures.forEach(f => {
+    const key = f.kickoff ? new Date(f.kickoff).toLocaleDateString(undefined, { weekday:'long', month:'short', day:'numeric' }) : "Date TBC";
+    (groups[key] = groups[key] || []).push(f);
+  });
+  return (
+    <div>
+      <div className="page-head">
+        <div className="eyebrow">FIXTURES · GAMEWEEK {gw}</div>
+        <h1 className="page-title">GW{gw} <span className="it">fixtures.</span></h1>
+        <p className="page-sub">Every match this gameweek — use it to plan your team of the week and survivor pick.</p>
+      </div>
+      {!boot && <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>⚠️ Couldn't load FPL fixtures. They load once deployed on Vercel; if you're live, hit Refresh on the Home tab.</div>}
+      {fixtures.length === 0 ? (
+        <div className="empty"><div className="empty-title">NO FIXTURES YET</div><p>FPL fixtures for GW{gw} aren't available yet. They usually appear once the schedule is confirmed.</p></div>
+      ) : Object.entries(groups).map(([day, fx]) => (
+        <div key={day} className="fx-daygroup">
+          <p className="fx-dayhdr">{day}</p>
+          <div className="fixtures-list">
+            {fx.map(f => {
+              const time = f.kickoff ? new Date(f.kickoff).toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' }) : "TBC";
+              return (
+                <div key={f.id} className="fxrow">
+                  <div className="side home"><span className="tn">{f.teamH}</span><TeamBadge short={f.teamH} code={codeOf(f.teamHId, f.teamH)} boot={boot} size={30} /></div>
+                  <div className="mid">{f.finished ? <span className="sc">{f.hScore}–{f.aScore}</span> : <span>{time}</span>}<div style={{ marginTop:3, fontSize:10, letterSpacing:'0.1em' }}>{f.finished ? "FT" : ""}</div></div>
+                  <div className="side away"><TeamBadge short={f.teamA} code={codeOf(f.teamAId, f.teamA)} boot={boot} size={30} /><span className="tn">{f.teamA}</span></div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      <p className="helper" style={{ marginTop:16 }}>Kickoff times shown in your local timezone. Scores fill in automatically as matches finish.</p>
+    </div>
+  );
+}
 function playersByTeamPos(players) {
   const out = {};
   Object.values(players || {}).forEach(p => {
@@ -1076,13 +1158,13 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
               <span>{gfEligible ? <span className="gf-tag">⚡ GOAL FEST</span> : ""}</span>
             </div>
             <div className="fixture-body">
-              <div className="fx-team home">{fullName(f.teamH, f.teamHId)}</div>
+              <div className="fx-team home" style={{ display:'flex', alignItems:'center', gap:8, justifyContent:'flex-end' }}><span>{fullName(f.teamH, f.teamHId)}</span><TeamBadge short={f.teamH} code={boot&&boot.teams&&boot.teams[f.teamHId]?boot.teams[f.teamHId].code:null} boot={boot} size={22} /></div>
               <div className="fx-score-in">
                 <input type="number" min="0" max="20" value={parts[0]||""} disabled={locked} placeholder="0" onChange={e=>setHalf(f.id,0,e.target.value)} />
                 <span className="fx-dash">–</span>
                 <input type="number" min="0" max="20" value={parts[1]||""} disabled={locked} placeholder="0" onChange={e=>setHalf(f.id,1,e.target.value)} />
               </div>
-              <div className="fx-team">{fullName(f.teamA, f.teamAId)}</div>
+              <div className="fx-team" style={{ display:'flex', alignItems:'center', gap:8, justifyContent:'flex-start' }}><TeamBadge short={f.teamA} code={boot&&boot.teams&&boot.teams[f.teamAId]?boot.teams[f.teamAId].code:null} boot={boot} size={22} /><span>{fullName(f.teamA, f.teamAId)}</span></div>
             </div>
             {f.finished && (
               <div className="fx-result">
@@ -1140,7 +1222,9 @@ function TeamTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, show
           const sel = pick && pick.team === t;
           return (
             <div key={t} className={"team-chip" + (sel?" selected":"") + (total>=sc.teamMaxUses?" used2":"")} onClick={()=>choose(t)} style={{ cursor: locked?'not-allowed':'pointer' }} title={fullName(t)}>
+              <TeamBadge short={t} boot={boot} size={26} className="chip-badge" />
               {t}
+              <span className="uses">{opponentsInGW(fixtures, t).join(" · ")}</span>
               <span className="uses">{total===0?"unused":`used ${total}×`}{dgwOpps[t]?" · DGW":""}</span>
             </div>
           );
@@ -1234,6 +1318,7 @@ function F4Slot({ pos, gw, locked, current, teams, byTeamPos, isAvailable, live,
 function SurvivorTab({ state, gw, locked, fixtures, myPred, fpl, updateMyPred, showToast }) {
   if (!state.survivorEnabled) return <div className="empty"><div className="empty-title">SURVIVOR OFF</div><p>The admin hasn't enabled the survivor game.</p></div>;
   const surv = computeSurvivor(myPred, state, fpl);
+  const boot = fpl.boot;
   const teams = teamsPlayingInGW(fixtures);
   const used = survivorTeamsUsed(myPred.survivor, gw);
   const pick = (myPred.survivor && myPred.survivor[gw]) || null;
@@ -1268,7 +1353,10 @@ function SurvivorTab({ state, gw, locked, fixtures, myPred, fpl, updateMyPred, s
             const isUsed = used.includes(t);
             const sel = pick && pick.team === t;
             return <div key={t} className={"team-chip" + (sel?" selected":"") + (isUsed?" used2":"")} onClick={()=>choose(t)} style={{ cursor: (locked||isOut)?'not-allowed':'pointer' }}>
-              {t}<span className="uses">{isUsed?"used":"available"}</span></div>;
+              <TeamBadge short={t} boot={boot} size={26} className="chip-badge" />
+              {t}
+              <span className="uses">{opponentsInGW(fixtures, t).join(" · ")}</span>
+              <span className="uses">{isUsed?"used":"available"}</span></div>;
           })}
         </div>
       )}
