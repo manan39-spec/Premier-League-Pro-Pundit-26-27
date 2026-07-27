@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     if (resource === 'bootstrap') {
       const data = await fplFetch('/bootstrap-static/');
       const teams = {};
-      (data.teams || []).forEach(t => { teams[t.id] = { id: t.id, name: t.name, short: t.short_name }; });
+      (data.teams || []).forEach(t => { teams[t.id] = { id: t.id, name: t.name, short: t.short_name, code: t.code }; });
       const players = {};
       (data.elements || []).forEach(e => {
         players[e.id] = {
