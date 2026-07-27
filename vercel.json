@@ -1,6 +1,1 @@
-{
-  "outputDirectory": "public",
-  "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
-  ]
-}
+{}
