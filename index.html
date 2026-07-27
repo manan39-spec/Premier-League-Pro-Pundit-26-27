@@ -1,0 +1,1535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pro Pundit League — Premier League Prediction Game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter+Tight:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,700;9..144,900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #140d1f;
+    --bg-2: #1b1329;
+    --card: #211830;
+    --card-2: #2a1f3d;
+    --line: #362a4a;
+    --line-bright: #4a3a63;
+    --ink: #f3eefb;
+    --ink-dim: #b9aecf;
+    --ink-mute: #7d7196;
+    --accent: #e90052;      /* PL magenta */
+    --accent-2: #00ff87;    /* PL green */
+    --cyan: #04f5ff;
+    --purple: #963cff;
+    --green: #00ff87;
+    --red: #ff4d4d;
+    --yellow: #ffd43b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--ink); font-family: 'Inter Tight', sans-serif; min-height: 100vh; }
+  body {
+    background-image:
+      radial-gradient(1200px 600px at 90% -10%, rgba(233,0,82,0.10), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(0,255,135,0.06), transparent 60%),
+      radial-gradient(700px 400px at 50% 50%, rgba(150,60,255,0.05), transparent 70%);
+    background-attachment: fixed;
+  }
+  button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+  input, select { font-family: inherit; }
+  a { color: var(--accent-2); }
+
+  .app { max-width: 1280px; margin: 0 auto; padding: 0 24px 80px; }
+  .top { display: flex; align-items: center; justify-content: space-between; padding: 22px 0 18px; border-bottom: 1px solid var(--line); margin-bottom: 28px; position: sticky; top: 0; background: var(--bg); z-index: 10; }
+  .brand { display: flex; align-items: baseline; gap: 12px; }
+  .brand-mark { font-family: 'Anton', sans-serif; letter-spacing: 0.02em; font-size: 26px; line-height: 1; color: var(--ink); text-transform: uppercase; }
+  .brand-mark .accent { color: var(--accent); }
+  .brand-sub { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-mute); text-transform: uppercase; letter-spacing: 0.15em; }
+  .user-pill { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; }
+  .user-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+  .user-pill button { font-size: 12px; color: var(--ink-mute); padding: 0 0 0 8px; border-left: 1px solid var(--line); }
+  .user-pill button:hover { color: var(--accent); }
+
+  .nav { display: flex; gap: 0; border-bottom: 1px solid var(--line); margin-bottom: 32px; overflow-x: auto; }
+  .nav button { font-family: 'Anton', sans-serif; font-size: 17px; letter-spacing: 0.04em; padding: 14px 20px 16px; color: var(--ink-mute); border-bottom: 3px solid transparent; transition: all 0.15s; white-space: nowrap; text-transform: uppercase; }
+  .nav button:hover { color: var(--ink); }
+  .nav button.active { color: var(--ink); border-bottom-color: var(--accent); }
+
+  .page-head { margin-bottom: 32px; }
+  .eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent); letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 12px; }
+  .page-title { font-family: 'Anton', sans-serif; font-size: clamp(38px, 7vw, 84px); line-height: 0.92; letter-spacing: -0.01em; text-transform: uppercase; }
+  .page-title .it { font-family: 'Fraunces', serif; font-weight: 400; font-style: italic; font-size: 0.82em; letter-spacing: -0.02em; color: var(--accent); }
+  .page-sub { color: var(--ink-dim); font-size: 16px; max-width: 760px; margin-top: 14px; line-height: 1.55; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 24px; }
+  .card-title { font-family: 'Anton', sans-serif; font-size: 22px; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .grid { display: grid; gap: 18px; }
+  .grid-2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .grid-3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 4px; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; transition: all 0.15s; border: 1px solid var(--line-bright); background: var(--card-2); color: var(--ink); }
+  .btn:hover { border-color: var(--accent); }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { background: #ff1a6b; border-color: #ff1a6b; }
+  .btn-go { background: var(--accent-2); color: #04231a; border-color: var(--accent-2); }
+  .btn-go:hover { filter: brightness(1.1); }
+  .btn-ghost { background: transparent; border-color: var(--line); }
+  .btn-danger { background: transparent; border-color: rgba(255,77,77,0.4); color: var(--red); }
+  .btn-danger:hover { background: rgba(255,77,77,0.1); }
+  .btn-sm { padding: 7px 12px; font-size: 11px; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .field label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-mute); letter-spacing: 0.15em; text-transform: uppercase; }
+  .field input, .field select { background: var(--bg-2); border: 1px solid var(--line); color: var(--ink); padding: 11px 14px; font-size: 14px; border-radius: 3px; outline: none; transition: border 0.15s; }
+  .field input:focus, .field select:focus { border-color: var(--accent); }
+  .field input:disabled, .field select:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .login-wrap { min-height: 80vh; display: flex; align-items: center; justify-content: center; }
+  .login-card { max-width: 480px; width: 100%; padding: 48px 40px; border: 1px solid var(--line); background: var(--card); position: relative; border-radius: 6px; }
+  .login-card::before { content: ''; position: absolute; top: -1px; left: -1px; right: -1px; height: 4px; background: linear-gradient(90deg, var(--accent), var(--purple), var(--accent-2)); border-radius: 6px 6px 0 0; }
+  .login-title { font-family: 'Anton', sans-serif; font-size: 52px; line-height: 0.9; letter-spacing: 0; text-transform: uppercase; margin-bottom: 8px; }
+  .login-title .it { font-family: 'Fraunces', serif; font-style: italic; font-weight: 400; color: var(--accent); }
+  .login-sub { color: var(--ink-dim); margin-bottom: 32px; font-size: 14px; line-height: 1.5; }
+
+  .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); margin-bottom: 32px; border-radius: 6px; overflow: hidden; }
+  .stat { background: var(--card); padding: 22px 20px; }
+  .stat-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-mute); letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 8px; }
+  .stat-value { font-family: 'Anton', sans-serif; font-size: 42px; line-height: 1; letter-spacing: 0.02em; }
+  .stat-value.accent { color: var(--accent); }
+  .stat-value.green { color: var(--green); }
+  .stat-sub { font-size: 12px; color: var(--ink-dim); margin-top: 6px; }
+
+  .rules-list { list-style: none; }
+  .rules-list li { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px dashed var(--line); gap: 16px; }
+  .rules-list li:last-child { border-bottom: none; }
+  .rule-name { font-size: 14px; color: var(--ink); }
+  .rule-points { font-family: 'Anton', sans-serif; font-size: 26px; color: var(--accent); letter-spacing: 0.04em; }
+
+  .fixture { background: var(--bg-2); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; margin-bottom: 10px; }
+  .fixture-head { display: flex; justify-content: space-between; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-mute); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 10px; }
+  .fixture-body { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; }
+  .fx-team { font-size: 15px; font-weight: 600; }
+  .fx-team.home { text-align: right; }
+  .fx-score-in { display: flex; align-items: center; gap: 6px; justify-content: center; }
+  .fx-score-in input { width: 46px; text-align: center; font-family: 'JetBrains Mono'; font-size: 18px; font-weight: 700; padding: 8px 4px; background: var(--card); border: 1px solid var(--line); color: var(--ink); border-radius: 3px; outline: none; }
+  .fx-score-in input:focus { border-color: var(--accent); }
+  .fx-dash { color: var(--ink-mute); font-family: 'JetBrains Mono'; font-weight: 700; }
+  .fx-result { margin-top: 10px; padding: 8px 12px; background: var(--card); border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-dim); display: flex; justify-content: space-between; letter-spacing: 0.05em; }
+  .fx-result .pts { color: var(--accent-2); font-weight: 700; }
+  .gf-tag { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em; color: var(--yellow); border: 1px solid rgba(255,212,59,0.4); padding: 1px 6px; border-radius: 999px; margin-left: 8px; }
+
+  .team-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .team-chip { padding: 10px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg-2); cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.15s; min-width: 90px; text-align: center; }
+  .team-chip:hover { border-color: var(--ink-dim); }
+  .team-chip.selected { border-color: var(--accent); background: rgba(233,0,82,0.12); color: var(--accent); }
+  .team-chip.used2 { opacity: 0.5; }
+  .team-chip .uses { display: block; font-family: 'JetBrains Mono'; font-size: 9px; color: var(--ink-mute); letter-spacing: 0.1em; margin-top: 3px; }
+
+  .f4-slot { background: var(--bg-2); border: 1px solid var(--line); border-radius: 6px; padding: 16px; margin-bottom: 12px; }
+  .f4-slot-title { font-family: 'Anton', sans-serif; font-size: 16px; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 10px; color: var(--accent-2); }
+  .f4-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .f4-row select { background: var(--card); border: 1px solid var(--line); color: var(--ink); padding: 10px 12px; font-size: 13px; border-radius: 3px; outline: none; }
+  .f4-row select:focus { border-color: var(--accent); }
+
+  .lb-table { width: 100%; border-collapse: collapse; }
+  .lb-table th, .lb-table td { padding: 13px 14px; text-align: left; border-bottom: 1px solid var(--line); }
+  .lb-table th { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-mute); letter-spacing: 0.15em; text-transform: uppercase; font-weight: 500; }
+  .lb-table td { font-size: 14px; }
+  .lb-table tr:hover td { background: var(--card-2); }
+  .lb-rank { font-family: 'Anton', sans-serif; font-size: 22px; letter-spacing: 0.04em; width: 60px; }
+  .lb-rank.gold { color: var(--yellow); }
+  .lb-rank.silver { color: #cfd0d4; }
+  .lb-rank.bronze { color: #d4824a; }
+  .lb-total { font-family: 'Anton', sans-serif; font-size: 26px; color: var(--accent); letter-spacing: 0.02em; text-align: right; }
+  .lb-breakdown { display: flex; gap: 10px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-mute); flex-wrap: wrap; }
+  .lb-breakdown span { background: var(--bg-2); padding: 3px 8px; border: 1px solid var(--line); border-radius: 3px; }
+  .lb-breakdown span strong { color: var(--ink); font-weight: 700; margin-left: 4px; }
+
+  .empty { padding: 56px 30px; text-align: center; color: var(--ink-mute); border: 1px dashed var(--line); border-radius: 6px; }
+  .empty-title { font-family: 'Anton', sans-serif; font-size: 26px; color: var(--ink-dim); margin-bottom: 8px; letter-spacing: 0.04em; }
+  .empty-mini { padding: 24px; text-align: center; color: var(--ink-mute); font-size: 13px; }
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--card); border: 1px solid var(--accent); padding: 14px 20px; font-size: 13px; z-index: 100; border-radius: 6px; animation: slideUp 0.2s ease-out; max-width: 360px; }
+  @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .helper { font-size: 12px; color: var(--ink-mute); margin-top: 6px; line-height: 1.5; }
+  .divider { height: 1px; background: var(--line); margin: 32px 0; }
+  .lock-banner { background: rgba(233,0,82,0.08); border: 1px solid rgba(233,0,82,0.3); padding: 14px 18px; margin-bottom: 24px; font-size: 13px; color: var(--accent); display: flex; align-items: center; gap: 10px; border-radius: 6px; }
+  .ok-banner { background: rgba(0,255,135,0.07); border: 1px solid rgba(0,255,135,0.28); color: var(--ink-dim); }
+
+  .countdown-row { background: linear-gradient(135deg, rgba(233,0,82,0.10), rgba(150,60,255,0.05)); border: 1px solid rgba(233,0,82,0.25); padding: 26px 30px; margin-bottom: 32px; display: flex; align-items: center; justify-content: space-between; gap: 24px; position: relative; overflow: hidden; border-radius: 8px; }
+  .countdown-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent); letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 4px; }
+  .countdown-where { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-mute); letter-spacing: 0.15em; text-transform: uppercase; margin-top: 6px; }
+  .countdown-numbers { display: flex; align-items: flex-end; gap: 6px; }
+  .cd-unit { display: flex; flex-direction: column; align-items: center; min-width: 54px; }
+  .cd-val { font-family: 'Anton', sans-serif; font-size: clamp(38px, 6vw, 60px); line-height: 0.9; color: var(--ink); letter-spacing: 0.02em; }
+  .cd-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--ink-mute); letter-spacing: 0.18em; margin-top: 4px; }
+  .cd-sep { font-family: 'Anton', sans-serif; font-size: clamp(34px, 5vw, 52px); color: var(--accent); align-self: flex-start; line-height: 0.9; margin-top: 4px; animation: blink 1.2s infinite; }
+  @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.25;} }
+  .countdown-row.live { background: linear-gradient(135deg, rgba(0,255,135,0.10), rgba(0,255,135,0.02)); border-color: rgba(0,255,135,0.35); }
+  .countdown-row.live .countdown-label { color: var(--green); }
+
+  .app-footer { margin-top: 60px; padding: 28px 0 12px; border-top: 1px solid var(--line); text-align: center; color: var(--ink-mute); font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; line-height: 1.8; }
+  .app-footer .accent { color: var(--accent); }
+  .login-footer { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--line); text-align: center; color: var(--ink-mute); font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; line-height: 1.8; }
+  .login-footer .accent { color: var(--accent); }
+
+  @media (max-width: 720px) {
+    .countdown-row { flex-direction: column; align-items: flex-start; padding: 20px; }
+    .countdown-numbers { width: 100%; justify-content: space-between; }
+    .fixture-body { grid-template-columns: 1fr auto 1fr; }
+  }
+  @media (max-width: 640px) {
+    .app { padding: 0 16px 60px; }
+    .login-card { padding: 32px 24px; }
+    .login-title { font-size: 40px; }
+    .nav button { font-size: 14px; padding: 12px 14px; }
+    .f4-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useEffect, useMemo, useCallback, useRef } = React;
+
+// ============================================================
+// SHARED STORE (Vercel /api/store -> Upstash Redis). Load-safe sync
+// ported from the proven PANENKA build.
+// ============================================================
+const API_STORE = '/api/store';
+const API_FPL = '/api/fpl';
+const SYNC_POLL_MS = 30000;
+let apiReady = false;
+
+async function initApi() {
+  try {
+    const res = await fetch(`${API_STORE}?health=1`);
+    if (!res.ok) { apiReady = false; return false; }
+    const data = await res.json();
+    apiReady = !!data.ok;
+    return apiReady;
+  } catch (e) { console.warn('store offline', e); apiReady = false; return false; }
+}
+async function remoteGet(key) {
+  if (!apiReady) return null;
+  try { const r = await fetch(`${API_STORE}?key=${encodeURIComponent(key)}`); if (!r.ok) return null; const d = await r.json(); return d.value ?? null; }
+  catch (e) { console.warn('remoteGet', e); return null; }
+}
+// Distinguishes "server said empty" from "read failed" so we never stamp a
+// blank state over live data under load.
+async function remoteGetStatus(key) {
+  if (!apiReady) return { ok: false };
+  try { const r = await fetch(`${API_STORE}?key=${encodeURIComponent(key)}`); if (!r.ok) return { ok: false }; const d = await r.json(); return { ok: true, value: d.value ?? null }; }
+  catch (e) { console.warn('remoteGetStatus', e); return { ok: false }; }
+}
+async function remoteSet(key, value) {
+  if (!apiReady) return false;
+  try { const r = await fetch(API_STORE, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ key, value }) }); return r.ok; }
+  catch (e) { console.warn('remoteSet', e); return false; }
+}
+async function remoteList(prefix) {
+  if (!apiReady) return [];
+  try { const r = await fetch(`${API_STORE}?prefix=${encodeURIComponent(prefix)}`); if (!r.ok) return []; const d = await r.json(); return Array.isArray(d.keys) ? d.keys : []; }
+  catch (e) { console.warn('remoteList', e); return []; }
+}
+async function remoteDeleteKeys(keys) {
+  if (!apiReady || !keys.length) return false;
+  try { const r = await fetch(API_STORE, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'delete', keys }) }); return r.ok; }
+  catch (e) { console.warn('remoteDeleteKeys', e); return false; }
+}
+async function remoteWipePrefix(prefix) {
+  if (!apiReady) return false;
+  try { const r = await fetch(API_STORE, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'wipe', prefix }) }); return r.ok; }
+  catch (e) { console.warn('remoteWipePrefix', e); return false; }
+}
+function parseStored(v) { try { return v ? JSON.parse(v) : null; } catch { return null; } }
+
+async function getShared(key) {
+  if (apiReady) {
+    const v = await remoteGet(key);
+    if (v !== null) { try { localStorage.setItem(key, JSON.stringify(v)); } catch {} return v; }
+  }
+  try { return parseStored(localStorage.getItem(key)); } catch { return null; }
+}
+async function setShared(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { console.error('setShared local', e); }
+  if (apiReady) await remoteSet(key, value);
+  return true;
+}
+async function getPersonal(key) { try { return parseStored(localStorage.getItem(key)); } catch { return null; } }
+async function setPersonal(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (e) { console.error('setPersonal', e); return false; } }
+async function listShared(prefix) {
+  if (apiReady) { const k = await remoteList(prefix); if (k.length) return k; }
+  try { return Object.keys(localStorage).filter(k => k.startsWith(prefix)); } catch { return []; }
+}
+
+// ============================================================
+// FPL CLIENT (via /api/fpl proxy) with localStorage caching so we
+// don't hammer the API. bootstrap cached ~10min; per-GW fixtures/live
+// cached and re-fetched for the live GW or on manual refresh.
+// ============================================================
+const FPL_BOOT_TTL = 10 * 60 * 1000;
+async function fplBootstrap(force) {
+  const cacheKey = 'pp_fpl_boot';
+  if (!force) {
+    const c = parseStored(localStorage.getItem(cacheKey));
+    if (c && (Date.now() - c._t) < FPL_BOOT_TTL) return c.data;
+  }
+  try {
+    const r = await fetch(`${API_FPL}?resource=bootstrap`);
+    if (!r.ok) throw new Error('bootstrap ' + r.status);
+    const data = await r.json();
+    try { localStorage.setItem(cacheKey, JSON.stringify({ _t: Date.now(), data })); } catch {}
+    return data;
+  } catch (e) {
+    console.warn('fplBootstrap failed', e);
+    const c = parseStored(localStorage.getItem(cacheKey));
+    return c ? c.data : null;
+  }
+}
+async function fplFixtures(gw, force) {
+  const cacheKey = 'pp_fpl_fx_' + gw;
+  const cached = parseStored(localStorage.getItem(cacheKey));
+  // Serve cached only if it exists AND (all finished OR fresh within 60s) unless forced.
+  if (!force && cached) {
+    const allDone = (cached.data || []).length > 0 && cached.data.every(f => f.finished);
+    if (allDone || (Date.now() - cached._t) < 60000) return cached.data;
+  }
+  try {
+    const r = await fetch(`${API_FPL}?resource=fixtures&gw=${gw}`);
+    if (!r.ok) throw new Error('fixtures ' + r.status);
+    const d = await r.json();
+    const data = d.fixtures || [];
+    try { localStorage.setItem(cacheKey, JSON.stringify({ _t: Date.now(), data })); } catch {}
+    return data;
+  } catch (e) {
+    console.warn('fplFixtures failed', e);
+    return cached ? cached.data : [];
+  }
+}
+async function fplLive(gw, force) {
+  const cacheKey = 'pp_fpl_live_' + gw;
+  const cached = parseStored(localStorage.getItem(cacheKey));
+  if (!force && cached && (Date.now() - cached._t) < 60000) return cached.data;
+  try {
+    const r = await fetch(`${API_FPL}?resource=live&gw=${gw}`);
+    if (!r.ok) throw new Error('live ' + r.status);
+    const d = await r.json();
+    const data = d.points || {};
+    try { localStorage.setItem(cacheKey, JSON.stringify({ _t: Date.now(), data })); } catch {}
+    return data;
+  } catch (e) {
+    console.warn('fplLive failed', e);
+    return cached ? cached.data : {};
+  }
+}
+
+// ============================================================
+// CONSTANTS
+// ============================================================
+const ADMIN_USERNAME = "PPADMIN";
+const ADMIN_PASSWORD = "Propundit007!@";     // change before sharing publicly
+const EXPORT_LOGINS = [
+  { username: "PPDATA", password: "Ppdata2026!@" },
+];
+const TOTAL_GW = 38;
+const HALF_SPLIT = 19; // GW1-19 first half, GW20-38 second half
+const POSITIONS = ["GK", "DEF", "MID", "FWD"];
+const POS_LABEL = { GK: "Goalkeeper", DEF: "Defender", MID: "Midfielder", FWD: "Forward" };
+
+const DEFAULT_SCORING = {
+  scoreOutcome: 1, scoreExact: 3,
+  gfOutcome: 1, gfExact: 2, gfThreshold: 4, // total must be strictly greater than 4
+  teamWin: 3, teamOverPenalty: 1, teamMaxUses: 2,
+  f4Multiplier: 1,
+};
+
+function defaultState() {
+  return {
+    season: "2025/26",
+    activeGW: 1,
+    scoresPerGW: 5,
+    locks: {},              // { [gw]: true }  (locked => frozen + visible)
+    selectedFixtures: {},   // { [gw]: [fixtureId,...] } which fixtures count for score predictions
+    scoring: DEFAULT_SCORING,
+    _v: 1,
+  };
+}
+
+// ============================================================
+// PASSWORD HASHING (SHA-256 + per-user salt)
+// ============================================================
+async function hashPassword(password, salt) {
+  const enc = new TextEncoder();
+  const buf = await crypto.subtle.digest('SHA-256', enc.encode(password + "::" + salt));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+function makeSalt() { return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + Date.now().toString(36); }
+async function makeUserRecord(name, password) {
+  const salt = makeSalt();
+  const passwordHash = await hashPassword(password, salt);
+  return { name, joined: Date.now(), salt, passwordHash, scores: {}, teamPick: {}, f4: {} };
+}
+
+// ============================================================
+// SCORING ENGINE (unit-tested separately — see scoring.test.js)
+// ============================================================
+const _sign = n => (n > 0 ? 1 : n < 0 ? -1 : 0);
+function parseScore(str) {
+  if (!str || typeof str !== "string") return null;
+  const m = str.trim().match(/^(\d{1,2})\s*-\s*(\d{1,2})$/);
+  if (!m) return null;
+  return [parseInt(m[1], 10), parseInt(m[2], 10)];
+}
+function scoreFixturePoints(predStr, fx, cfg) {
+  cfg = cfg || DEFAULT_SCORING;
+  if (!fx || !fx.finished) return 0;
+  const p = parseScore(predStr);
+  if (!p) return 0;
+  const ph = p[0], pa = p[1], ah = fx.hScore, aa = fx.aScore;
+  if (ah == null || aa == null) return 0;
+  const exact = ph === ah && pa === aa;
+  const outcomeHit = _sign(ph - pa) === _sign(ah - aa);
+  let base = exact ? cfg.scoreExact : (outcomeHit ? cfg.scoreOutcome : 0);
+  let bonus = 0;
+  if ((ph + pa) > cfg.gfThreshold && (ah + aa) > cfg.gfThreshold) {
+    if (exact) bonus = cfg.gfExact;
+    else if (outcomeHit) bonus = cfg.gfOutcome;
+  }
+  return base + bonus;
+}
+function teamPickPoints(pick, gwFixtures, usageCountBefore, cfg) {
+  cfg = cfg || DEFAULT_SCORING;
+  if (!pick || !pick.team) return 0;
+  if (usageCountBefore >= cfg.teamMaxUses) return -cfg.teamOverPenalty;
+  const mine = (gwFixtures || []).filter(f => f.teamH === pick.team || f.teamA === pick.team);
+  if (mine.length === 0) return 0;
+  let target = mine;
+  if (pick.oppTag) {
+    const tagged = mine.filter(f => f.teamH === pick.oppTag || f.teamA === pick.oppTag);
+    if (tagged.length) target = tagged;
+  }
+  const won = target.some(f => {
+    if (!f.finished || f.hScore == null || f.aScore == null) return false;
+    const homeWin = f.hScore > f.aScore, awayWin = f.aScore > f.hScore;
+    return (f.teamH === pick.team && homeWin) || (f.teamA === pick.team && awayWin);
+  });
+  return won ? cfg.teamWin : 0;
+}
+function f4Points(picks, livePts, cfg) {
+  cfg = cfg || DEFAULT_SCORING;
+  if (!picks) return 0;
+  const ids = [picks.gk, picks.def, picks.mid, picks.fwd].filter(Boolean);
+  const sum = ids.reduce((t, id) => t + (Number((livePts || {})[id]) || 0), 0);
+  return sum * (cfg.f4Multiplier || 1);
+}
+function halfOf(gw) { return gw <= HALF_SPLIT ? 1 : 2; }
+
+// F4 availability predicate for dropdowns (per-player usage limits).
+function makeF4Availability(f4History) {
+  return function isAvailable(playerId, pos, targetGW) {
+    const uses = [];
+    Object.entries(f4History || {}).forEach(([gwStr, pk]) => {
+      const gw = parseInt(gwStr, 10);
+      if (gw === targetGW || !pk) return;
+      ["gk","def","mid","fwd"].forEach(slot => { if (pk[slot] === playerId) uses.push(gw); });
+    });
+    if (pos === "DEF" || pos === "MID") return uses.length === 0;
+    if (uses.length >= 2) return false;
+    return !uses.some(g => halfOf(g) === halfOf(targetGW));
+  };
+}
+
+// How many times a team has been picked across gameweeks strictly before `beforeGW`.
+function teamUsesBefore(teamPickMap, team, beforeGW) {
+  let n = 0;
+  Object.entries(teamPickMap || {}).forEach(([gwStr, pk]) => {
+    const gw = parseInt(gwStr, 10);
+    if (gw < beforeGW && pk && pk.team === team) n++;
+  });
+  return n;
+}
+// Total season uses of a team (for chip labels).
+function teamUsesTotal(teamPickMap, team) {
+  let n = 0;
+  Object.values(teamPickMap || {}).forEach(pk => { if (pk && pk.team === team) n++; });
+  return n;
+}
+
+// ============================================================
+// SEASON STANDINGS — aggregate every scored gameweek.
+//   fpl = { fixturesByGW: {gw:[fx]}, liveByGW: {gw:{id:pts}} }
+//   Scores gameweeks 1..activeGW (unfinished fixtures naturally score 0).
+// ============================================================
+function computeUserSeason(pred, state, fpl) {
+  const cfg = state.scoring || DEFAULT_SCORING;
+  const bd = { scores: 0, team: 0, f4: 0 };
+  const perGW = {};
+  const maxGW = state.activeGW || 1;
+  // chronological team usage
+  const teamCount = {};
+  for (let gw = 1; gw <= maxGW; gw++) {
+    const gwFx = (fpl.fixturesByGW && fpl.fixturesByGW[gw]) || [];
+    const live = (fpl.liveByGW && fpl.liveByGW[gw]) || {};
+    let sPts = 0, tPts = 0, fPts = 0;
+    // score predictions (only the fixtures admin selected for this GW)
+    const selIds = (state.selectedFixtures && state.selectedFixtures[gw]) || [];
+    const preds = (pred.scores && pred.scores[gw]) || {};
+    selIds.forEach(fid => {
+      const fx = gwFx.find(f => String(f.id) === String(fid));
+      if (fx) sPts += scoreFixturePoints(preds[fid], fx, cfg);
+    });
+    // team pick
+    const tp = (pred.teamPick && pred.teamPick[gw]) || null;
+    if (tp && tp.team) {
+      const before = teamCount[tp.team] || 0;
+      tPts += teamPickPoints(tp, gwFx, before, cfg);
+      teamCount[tp.team] = before + 1;
+    }
+    // fantastic four
+    const f4 = (pred.f4 && pred.f4[gw]) || null;
+    if (f4) fPts += f4Points(f4, live, cfg);
+
+    bd.scores += sPts; bd.team += tPts; bd.f4 += fPts;
+    if (sPts || tPts || fPts) perGW[gw] = { scores: sPts, team: tPts, f4: fPts, total: sPts + tPts + fPts };
+  }
+  const total = bd.scores + bd.team + bd.f4;
+  return { name: pred.name, total, breakdown: bd, perGW };
+}
+function computeStandings(users, state, fpl) {
+  return (users || [])
+    .map(u => computeUserSeason(u, state, fpl))
+    .sort((a, b) => b.total - a.total);
+}
+
+// ============================================================
+// MAIN APP
+// ============================================================
+function App() {
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
+  const [state, setState] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [fpl, setFpl] = useState({ boot: null, fixturesByGW: {}, liveByGW: {} });
+  const [view, setView] = useState("home");
+  const [toast, setToast] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminRole, setAdminRole] = useState(null);
+  const [remoteAvailable, setRemoteAvailable] = useState(false);
+  const [fplBusy, setFplBusy] = useState(false);
+  const stateRef = useRef(null);
+  useEffect(() => { stateRef.current = state; }, [state]);
+
+  const showToast = useCallback((msg) => { setToast(msg); setTimeout(() => setToast(null), 2600); }, []);
+
+  // ---- load-safe shared state ----
+  const refreshState = useCallback(async () => {
+    let s = null;
+    if (apiReady) {
+      const res = await remoteGetStatus("pp_state");
+      if (res.ok && res.value) { s = res.value; try { localStorage.setItem("pp_state", JSON.stringify(s)); } catch {} }
+      else if (res.ok && !res.value) { s = defaultState(); await setShared("pp_state", s); }
+      else { const local = parseStored(localStorage.getItem("pp_state")); if (local) setState(local); return local; }
+    } else {
+      s = parseStored(localStorage.getItem("pp_state")) || defaultState();
+    }
+    // non-destructive migrations
+    let save = false;
+    if (!s.scoring) { s.scoring = { ...DEFAULT_SCORING }; save = true; }
+    if (!s.locks) { s.locks = {}; save = true; }
+    if (!s.selectedFixtures) { s.selectedFixtures = {}; save = true; }
+    if (!s.activeGW) { s.activeGW = 1; save = true; }
+    if (save && apiReady) await setShared("pp_state", s);
+    setState(s);
+    return s;
+  }, []);
+
+  const loadUsers = useCallback(async () => {
+    const keys = await listShared("pp_pred:");
+    const all = [];
+    for (const k of keys) { const d = await getShared(k); if (d) all.push(d); }
+    setUsers(all);
+    return all;
+  }, []);
+
+  // ---- FPL data for GW 1..activeGW (cached; only the live GW refetches) ----
+  const loadFpl = useCallback(async (s, force) => {
+    const st = s || stateRef.current;
+    if (!st) return;
+    setFplBusy(true);
+    try {
+      const boot = await fplBootstrap(force);
+      const active = st.activeGW || 1;
+      const fixturesByGW = {}, liveByGW = {};
+      for (let gw = 1; gw <= active; gw++) {
+        const f = (force && gw === active);
+        fixturesByGW[gw] = await fplFixtures(gw, f);
+        liveByGW[gw] = await fplLive(gw, f);
+      }
+      setFpl({ boot, fixturesByGW, liveByGW });
+    } catch (e) { console.warn('loadFpl', e); }
+    finally { setFplBusy(false); }
+  }, []);
+
+  const refreshAll = useCallback(async (force) => {
+    const s = await refreshState();
+    await loadFpl(s, force);
+    await loadUsers();
+  }, [refreshState, loadFpl, loadUsers]);
+
+  useEffect(() => {
+    (async () => {
+      const savedUser = await getPersonal("current_user");
+      if (savedUser) setUser(savedUser);
+      const ready = await initApi();
+      setRemoteAvailable(ready);
+      await refreshAll(false);
+      setLoading(false);
+    })();
+  }, [refreshAll]);
+
+  // poll shared state + live GW only (light)
+  useEffect(() => {
+    if (!remoteAvailable) return;
+    const id = setInterval(async () => {
+      const s = await refreshState();
+      const active = (s || stateRef.current || {}).activeGW || 1;
+      const fx = await fplFixtures(active, true);
+      const lv = await fplLive(active, true);
+      setFpl(prev => ({ ...prev, fixturesByGW: { ...prev.fixturesByGW, [active]: fx }, liveByGW: { ...prev.liveByGW, [active]: lv } }));
+    }, SYNC_POLL_MS);
+    return () => clearInterval(id);
+  }, [remoteAvailable, refreshState]);
+
+  const login = useCallback(async (name) => {
+    const clean = name.trim(); if (!clean) return;
+    setUser(clean); await setPersonal("current_user", clean); await refreshAll(false);
+  }, [refreshAll]);
+  const logout = useCallback(async () => {
+    setUser(null); setIsAdmin(false); setAdminRole(null); await setPersonal("current_user", "");
+  }, []);
+
+  const myPred = useMemo(() => (!user || !users) ? null : users.find(u => u.name === user), [user, users]);
+
+  const updateMyPred = useCallback(async (mutator) => {
+    if (!user) return;
+    let p = await getShared("pp_pred:" + user);
+    if (!p) p = { name: user, joined: Date.now(), scores: {}, teamPick: {}, f4: {} };
+    const updated = mutator({ ...p });
+    updated.lastEdited = Date.now();
+    await setShared("pp_pred:" + user, updated);
+    setUsers(prev => prev.some(u => u.name === user) ? prev.map(u => u.name === user ? updated : u) : [...prev, updated]);
+  }, [user]);
+
+  // server-verified admin writes (never overwrite newer data / never blank)
+  const updateState = useCallback(async (mutator) => {
+    let base = null;
+    if (apiReady) {
+      base = await remoteGet("pp_state");
+      if (!base) { showToast("⚠️ Couldn't reach the server — NOT saved. Try again."); return; }
+    } else {
+      base = parseStored(localStorage.getItem("pp_state"));
+      if (!base) { showToast("⚠️ Offline and no local data — not saved."); return; }
+    }
+    const updated = mutator({ ...base });
+    try { localStorage.setItem("pp_state", JSON.stringify(updated)); } catch {}
+    setState(updated);
+    if (!apiReady) { showToast("⚠️ Offline — saved on this device only."); return; }
+    let ok = false;
+    for (let i = 0; i < 3 && !ok; i++) { if (i) await new Promise(r => setTimeout(r, 500)); ok = await remoteSet("pp_state", updated); }
+    if (!ok) { showToast("⚠️ NOT saved after retries — re-check and try again."); console.error("updateState failed"); }
+  }, [showToast]);
+
+  const standings = useMemo(() => state ? computeStandings(users, state, fpl) : [], [users, state, fpl]);
+
+  if (loading) {
+    return (
+      <div className="login-wrap">
+        <div style={{ fontFamily: 'Anton', fontSize: 32, letterSpacing: '0.04em', color: 'var(--ink-mute)' }}>LOADING…</div>
+      </div>
+    );
+  }
+  if (!user) return <LoginView onLogin={login} remoteAvailable={remoteAvailable} />;
+
+  return (
+    <>
+      <div className="app">
+        <header className="top">
+          <div className="brand">
+            <div className="brand-mark">PRO <span className="accent">PUNDIT</span> LEAGUE</div>
+            <div className="brand-sub">Season 6 · {state.season} · Premier League</div>
+          </div>
+          <div className="user-pill"><span className="dot"></span><span>{user}</span><button onClick={logout}>switch</button></div>
+        </header>
+        <nav className="nav">
+          <button className={view==="home"?"active":""} onClick={()=>setView("home")}>Home</button>
+          <button className={view==="predict"?"active":""} onClick={()=>setView("predict")}>Predict</button>
+          <button className={view==="picks"?"active":""} onClick={()=>setView("picks")}>Picks</button>
+          <button className={view==="leaderboard"?"active":""} onClick={()=>setView("leaderboard")}>Leaderboard</button>
+          <button className={view==="rules"?"active":""} onClick={()=>setView("rules")}>Rules</button>
+          <button className={view==="admin"?"active":""} onClick={()=>setView("admin")}>Admin</button>
+        </nav>
+
+        {view==="home" && <HomeView state={state} user={user} myPred={myPred} standings={standings} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} setView={setView} />}
+        {view==="predict" && <PredictView state={state} myPred={myPred} users={users} fpl={fpl} updateMyPred={updateMyPred} showToast={showToast} />}
+        {view==="picks" && <PicksView state={state} users={users} currentUser={user} fpl={fpl} />}
+        {view==="leaderboard" && <LeaderboardView standings={standings} currentUser={user} state={state} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} />}
+        {view==="rules" && <RulesView state={state} />}
+        {view==="admin" && <AdminView state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} isAdmin={isAdmin} setIsAdmin={setIsAdmin} adminRole={adminRole} setAdminRole={setAdminRole} showToast={showToast} onRefresh={()=>refreshAll(true)} />}
+
+        <footer className="app-footer">
+          Pro Pundit League · <span className="accent">Season 6</span> · Put those pundit hats on
+          <div>© {new Date().getFullYear()} Pro Pundit League</div>
+        </footer>
+      </div>
+      {toast && <div className="toast">{toast}</div>}
+    </>
+  );
+}
+
+// ============================================================
+// LOGIN
+// ============================================================
+function LoginView({ onLogin, remoteAvailable }) {
+  const [step, setStep] = useState("name");
+  const [name, setName] = useState("");
+  const [pw, setPw] = useState(""); const [pw2, setPw2] = useState("");
+  const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
+  const clean = name.trim();
+
+  const checkName = async () => {
+    if (!clean) { setError("Enter a name first"); return; }
+    if (clean.length > 30) { setError("Keep it under 30 characters"); return; }
+    setBusy(true); setError("");
+    const existing = await getShared("pp_pred:" + clean);
+    setBusy(false);
+    if (!existing) setStep("signup");
+    else if (!existing.passwordHash) setStep("claim");
+    else setStep("signin");
+  };
+  const doSignin = async () => {
+    setBusy(true); setError("");
+    const existing = await getShared("pp_pred:" + clean);
+    if (!existing) { setError("Account vanished — refresh and try again"); setBusy(false); return; }
+    const hash = await hashPassword(pw, existing.salt);
+    setBusy(false);
+    if (hash !== existing.passwordHash) { setError("Wrong password. Ask the admin to reset if you forgot."); return; }
+    onLogin(clean);
+  };
+  const doSignupOrClaim = async () => {
+    if (pw.length < 4) { setError("Password should be at least 4 characters"); return; }
+    if (pw !== pw2) { setError("Passwords don't match"); return; }
+    setBusy(true); setError("");
+    if (step === "signup") { await setShared("pp_pred:" + clean, await makeUserRecord(clean, pw)); }
+    else {
+      const existing = await getShared("pp_pred:" + clean);
+      if (!existing) { setError("Account vanished — refresh"); setBusy(false); return; }
+      const salt = makeSalt(); const passwordHash = await hashPassword(pw, salt);
+      await setShared("pp_pred:" + clean, { ...existing, salt, passwordHash });
+    }
+    setBusy(false); onLogin(clean);
+  };
+  const goBack = () => { setStep("name"); setPw(""); setPw2(""); setError(""); };
+
+  return (
+    <div className="app">
+      <div className="login-wrap">
+        <div className="login-card">
+          <div className="eyebrow">PREMIER LEAGUE · {new Date().getFullYear()} · SEASON 6</div>
+          <div className="login-title">PRO <span className="it">pundit.</span></div>
+          <p className="login-sub">
+            {step === "name" && <>Welcome back to the sixth season of Pro Pundit. The stage is set — put those pundit hats on and let the game begin. Score predictions, team of the week, and the Fantastic Four await.</>}
+            {step === "signin" && <>Welcome back, <strong style={{ color: 'var(--accent)' }}>{clean}</strong>. Enter your password to make your picks.</>}
+            {step === "claim" && <><strong style={{ color: 'var(--accent)' }}>{clean}</strong> exists but has no password yet. Set one now to protect your picks.</>}
+            {step === "signup" && <>New pundit. Pick a password — you'll need it every time you sign in, and the admin can reset it if you forget.</>}
+          </p>
+          {!remoteAvailable && (
+            <div className="lock-banner" style={{ borderColor: 'rgba(255,77,77,0.3)', color: 'var(--red)' }}>
+              ⚠️ Shared storage is offline. Picks only save on this device until /api/store + Upstash Redis are linked in Vercel.
+            </div>
+          )}
+          {step === "name" && (
+            <>
+              <div className="field">
+                <label>Your name</label>
+                <input type="text" placeholder="e.g. Pranav, Karan, Manan…" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&checkName()} autoFocus disabled={busy} />
+                <div className="helper">Use the same name every time — it's how your picks stay attached to you across devices.</div>
+              </div>
+              {error && <div style={{ color:'var(--red)', fontSize:13, marginBottom:12 }}>{error}</div>}
+              <button className="btn btn-primary" onClick={checkName} disabled={busy} style={{ width:'100%', justifyContent:'center', padding:'14px' }}>{busy?"Checking…":"Continue →"}</button>
+            </>
+          )}
+          {step === "signin" && (
+            <>
+              <div className="field"><label>Password</label>
+                <input type="password" placeholder="Your password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doSignin()} autoFocus disabled={busy} /></div>
+              {error && <div style={{ color:'var(--red)', fontSize:13, marginBottom:12 }}>{error}</div>}
+              <div style={{ display:'flex', gap:8 }}>
+                <button className="btn btn-ghost" onClick={goBack} disabled={busy}>← Back</button>
+                <button className="btn btn-primary" onClick={doSignin} disabled={busy} style={{ flex:1, justifyContent:'center' }}>{busy?"Verifying…":"Sign in →"}</button>
+              </div>
+            </>
+          )}
+          {(step==="claim"||step==="signup") && (
+            <>
+              <div className="field"><label>{step==="claim"?"Set a password":"Create a password"}</label>
+                <input type="password" placeholder="Min 4 characters" value={pw} onChange={e=>setPw(e.target.value)} autoFocus disabled={busy} /></div>
+              <div className="field"><label>Confirm password</label>
+                <input type="password" placeholder="Type it again" value={pw2} onChange={e=>setPw2(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doSignupOrClaim()} disabled={busy} />
+                <div className="helper">Write it down. Admin can reset it, but it's easier not to lose it.</div></div>
+              {error && <div style={{ color:'var(--red)', fontSize:13, marginBottom:12 }}>{error}</div>}
+              <div style={{ display:'flex', gap:8 }}>
+                <button className="btn btn-ghost" onClick={goBack} disabled={busy}>← Back</button>
+                <button className="btn btn-primary" onClick={doSignupOrClaim} disabled={busy} style={{ flex:1, justifyContent:'center' }}>{busy?"Setting up…":step==="signup"?"Join the league →":"Save & sign in →"}</button>
+              </div>
+            </>
+          )}
+          <div className="login-footer">Pro Pundit League · <span className="accent">Season 6</span><div>© {new Date().getFullYear()} Pro Pundit League</div></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// HOME
+// ============================================================
+function HomeView({ state, user, myPred, standings, fpl, fplBusy, onRefresh, setView }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
+
+  const myRow = standings.find(s => s.name === user);
+  const myRank = standings.findIndex(s => s.name === user) + 1;
+  const leader = standings[0];
+  const activeGW = state.activeGW || 1;
+  const locked = !!(state.locks || {})[activeGW];
+
+  // Next FPL deadline from bootstrap events
+  const events = (fpl.boot && fpl.boot.events) || [];
+  const nextEvent = events.find(e => e.isNext) || events.find(e => e.isCurrent) || null;
+  const deadlineMs = nextEvent ? new Date(nextEvent.deadline).getTime() : 0;
+  const diff = Math.max(0, deadlineMs - now);
+  const days = Math.floor(diff/86400000), hrs = Math.floor((diff%86400000)/3600000), mins = Math.floor((diff%3600000)/60000), secs = Math.floor((diff%60000)/1000);
+  const pad = n => String(n).padStart(2,'0');
+  const passed = deadlineMs && diff === 0;
+
+  return (
+    <div>
+      <div className="page-head">
+        <div className="eyebrow">GAMEWEEK {activeGW} · {locked ? "LOCKED" : "OPEN"}</div>
+        <h1 className="page-title">PUT THE <span className="it">hats on.</span></h1>
+        <p className="page-sub">Predict five scorelines, back a winner, and build your Fantastic Four. Live points pulled straight from the official FPL data — bonuses included.</p>
+      </div>
+
+      {deadlineMs ? (
+        <div className={"countdown-row" + (passed ? " live" : "")}>
+          <div>
+            <div className="countdown-label">{passed ? "🔴 DEADLINE PASSED" : `FPL DEADLINE · ${nextEvent ? nextEvent.name.toUpperCase() : ""}`}</div>
+            <div className="countdown-where">{new Date(deadlineMs).toLocaleString(undefined, { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })}</div>
+            <div style={{ marginTop:10, fontFamily:'JetBrains Mono', fontSize:11, letterSpacing:'0.08em', textTransform:'uppercase', color: passed?'var(--red)':'var(--accent-2)' }}>
+              {passed ? "Picks after the deadline don't count" : "Get your picks in before this"}
+            </div>
+          </div>
+          {!passed && (
+            <div className="countdown-numbers">
+              {days>0 && <><div className="cd-unit"><div className="cd-val">{pad(days)}</div><div className="cd-label">DAYS</div></div><div className="cd-sep">:</div></>}
+              <div className="cd-unit"><div className="cd-val">{pad(hrs)}</div><div className="cd-label">HRS</div></div><div className="cd-sep">:</div>
+              <div className="cd-unit"><div className="cd-val">{pad(mins)}</div><div className="cd-label">MIN</div></div><div className="cd-sep">:</div>
+              <div className="cd-unit"><div className="cd-val">{pad(secs)}</div><div className="cd-label">SEC</div></div>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      <div className="stat-row">
+        <div className="stat"><div className="stat-label">Your Points</div><div className="stat-value accent">{myRow ? myRow.total : 0}</div><div className="stat-sub">Rank #{myRank>0?myRank:"—"} of {standings.length}</div></div>
+        <div className="stat"><div className="stat-label">League Leader</div><div className="stat-value" style={{ fontSize:24 }}>{leader ? leader.name.toUpperCase() : "—"}</div><div className="stat-sub">{leader ? `${leader.total} points` : "no points yet"}</div></div>
+        <div className="stat"><div className="stat-label">Gameweek</div><div className="stat-value green">{activeGW}</div><div className="stat-sub">{locked ? "locked" : "open for picks"}</div></div>
+        <div className="stat"><div className="stat-label">Pundits</div><div className="stat-value" style={{ fontSize:34 }}>{standings.length}</div><div className="stat-sub">in the league</div></div>
+      </div>
+
+      <div className="grid grid-2">
+        <div className="card">
+          <div className="card-title">Top of the Table <button className="btn btn-ghost btn-sm" onClick={()=>setView("leaderboard")}>Full table →</button></div>
+          {standings.length === 0 ? <div className="empty-mini">No points on the board yet.</div> : (
+            <div>
+              {standings.slice(0,6).map((s,i) => (
+                <div key={s.name} style={{ display:'flex', alignItems:'center', gap:14, padding:'11px 0', borderBottom:'1px dashed var(--line)' }}>
+                  <div style={{ fontFamily:'Anton', fontSize:22, minWidth:34, color: i===0?'var(--yellow)':i===1?'#cfd0d4':i===2?'#d4824a':'var(--ink-mute)' }}>{i+1}</div>
+                  <div style={{ flex:1, fontWeight:600 }}>{s.name}{s.name===user?" · you":""}</div>
+                  <div style={{ fontFamily:'Anton', fontSize:20, color:'var(--accent)' }}>{s.total}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="card">
+          <div className="card-title">Your Breakdown <button className="btn btn-ghost btn-sm" onClick={onRefresh} disabled={fplBusy}>{fplBusy?"↻ …":"↻ Refresh"}</button></div>
+          <ul className="rules-list">
+            <li><span className="rule-name">Score predictions</span><span className="rule-points">{myRow?myRow.breakdown.scores:0}</span></li>
+            <li><span className="rule-name">Team of the week</span><span className="rule-points">{myRow?myRow.breakdown.team:0}</span></li>
+            <li><span className="rule-name">Fantastic Four</span><span className="rule-points">{myRow?myRow.breakdown.f4:0}</span></li>
+            <li style={{ borderTop:'1px solid var(--line)', marginTop:6, paddingTop:12 }}><span className="rule-name" style={{ fontWeight:700 }}>Total</span><span className="rule-points" style={{ color:'var(--accent-2)' }}>{myRow?myRow.total:0}</span></li>
+          </ul>
+          <button className="btn btn-primary" style={{ marginTop:16, width:'100%', justifyContent:'center' }} onClick={()=>setView("predict")}>Make GW{activeGW} picks →</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// RULES
+// ============================================================
+function RulesView({ state }) {
+  const sc = state.scoring || DEFAULT_SCORING;
+  return (
+    <div>
+      <div className="page-head">
+        <div className="eyebrow">HOW IT WORKS</div>
+        <h1 className="page-title">THE <span className="it">rules.</span></h1>
+        <p className="page-sub">Three sections every gameweek. Get your picks in before the FPL deadline — anything after doesn't count.</p>
+      </div>
+      <div className="grid grid-2">
+        <div className="card">
+          <div className="card-title">1 · Score Predictions</div>
+          <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Predict the scoreline (X-X) for the {state.scoresPerGW} selected fixtures each gameweek. Double gameweeks may add extra fixtures for bonus points.</p>
+          <ul className="rules-list compact" style={{ marginTop:12 }}>
+            <li><span className="rule-name">Correct outcome</span><span className="rule-points">{sc.scoreOutcome}</span></li>
+            <li><span className="rule-name">Exact result</span><span className="rule-points">{sc.scoreExact}</span></li>
+          </ul>
+          <div style={{ marginTop:14, padding:'14px 16px', background:'var(--bg-2)', border:'1px solid rgba(255,212,59,0.3)', borderRadius:6 }}>
+            <div style={{ fontFamily:'Anton', fontSize:16, color:'var(--yellow)', letterSpacing:'0.04em' }}>⚡ GOAL FEST BONUS</div>
+            <p style={{ color:'var(--ink-dim)', fontSize:13, lineHeight:1.6, marginTop:8 }}>
+              When your predicted total is above {sc.gfThreshold} goals AND the real game also has more than {sc.gfThreshold} total goals: <strong style={{color:'var(--ink)'}}>+{sc.gfOutcome}</strong> bonus for the right outcome, <strong style={{color:'var(--ink)'}}>+{sc.gfExact}</strong> for the exact result. (4-0 doesn't qualify — the total must be more than 4.)
+            </p>
+            <p style={{ color:'var(--ink-mute)', fontSize:12, lineHeight:1.5, marginTop:8 }}>e.g. predict 4-1: if it ends 4-2 you get {sc.scoreOutcome + sc.gfOutcome}; if it ends 4-1 you get {sc.scoreExact + sc.gfExact}.</p>
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-title">2 · Team of the Week</div>
+          <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Pick one team you're sure will <strong style={{color:'var(--ink)'}}>win</strong> this gameweek. A draw doesn't count — win only.</p>
+          <ul className="rules-list compact" style={{ marginTop:12 }}>
+            <li><span className="rule-name">Correct win</span><span className="rule-points">{sc.teamWin}</span></li>
+            <li><span className="rule-name">Picking a team a 3rd time</span><span className="rule-points" style={{ color:'var(--red)' }}>-{sc.teamOverPenalty}</span></li>
+          </ul>
+          <p className="helper" style={{ marginTop:12 }}>You can only pick a team <strong>{sc.teamMaxUses} times</strong> all season. In a double gameweek, tag the opponent for the fixture you mean — e.g. Leeds (BUR).</p>
+          <div className="divider" style={{ margin:'20px 0' }}></div>
+          <div className="card-title" style={{ fontSize:20 }}>3 · Fantastic Four</div>
+          <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Pick a GK, defender, midfielder and forward. You score the <strong style={{color:'var(--ink)'}}>sum of their real FPL points</strong> that gameweek — bonuses included.</p>
+          <p className="helper" style={{ marginTop:10 }}>Defender & midfielder: usable <strong>once</strong> all season. Goalkeeper & forward: <strong>twice</strong>, but once in GW1-{HALF_SPLIT} and once in GW{HALF_SPLIT+1}-{TOTAL_GW}. Used players drop out of the menus automatically.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// PREDICT (3 tabs)
+// ============================================================
+function teamsPlayingInGW(fixtures) {
+  const set = [];
+  (fixtures || []).forEach(f => { if (!set.includes(f.teamH)) set.push(f.teamH); if (!set.includes(f.teamA)) set.push(f.teamA); });
+  return set.sort();
+}
+function playersByTeamPos(players) {
+  const out = {};
+  Object.values(players || {}).forEach(p => {
+    if (!out[p.teamId]) out[p.teamId] = { GK: [], DEF: [], MID: [], FWD: [] };
+    if (out[p.teamId][p.pos]) out[p.teamId][p.pos].push(p);
+  });
+  Object.values(out).forEach(t => POSITIONS.forEach(pos => t[pos].sort((a,b)=>a.name.localeCompare(b.name))));
+  return out;
+}
+
+function PredictView({ state, myPred, users, fpl, updateMyPred, showToast }) {
+  const [tab, setTab] = useState("scores");
+  const gw = state.activeGW || 1;
+  const locked = !!(state.locks || {})[gw];
+  const fixtures = (fpl.fixturesByGW && fpl.fixturesByGW[gw]) || [];
+  const live = (fpl.liveByGW && fpl.liveByGW[gw]) || {};
+  const boot = fpl.boot;
+  if (!myPred) return <div className="empty"><div className="empty-title">Loading…</div></div>;
+
+  return (
+    <div>
+      <div className="page-head">
+        <div className="eyebrow">GAMEWEEK {gw} · {locked ? "🔒 LOCKED" : "OPEN"}</div>
+        <h1 className="page-title">GW{gw} <span className="it">picks.</span></h1>
+        <p className="page-sub">{locked ? "This gameweek is locked — showing your picks and how they scored." : "Fill in all three sections before the FPL deadline. Your picks save the moment you make them."}</p>
+      </div>
+
+      {!boot && <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>⚠️ Couldn't load FPL data (teams/players/fixtures). It works once deployed on Vercel; if you're seeing this live, hit Refresh on the Home tab.</div>}
+
+      <div className="nav" style={{ marginBottom: 28 }}>
+        <button className={tab==="scores"?"active":""} onClick={()=>setTab("scores")}>Score Predictions</button>
+        <button className={tab==="team"?"active":""} onClick={()=>setTab("team")}>Team of the Week</button>
+        <button className={tab==="f4"?"active":""} onClick={()=>setTab("f4")}>Fantastic Four</button>
+      </div>
+
+      {tab==="scores" && <ScoresTab state={state} gw={gw} locked={locked} fixtures={fixtures} boot={boot} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
+      {tab==="team" && <TeamTab state={state} gw={gw} locked={locked} fixtures={fixtures} boot={boot} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
+      {tab==="f4" && <F4Tab state={state} gw={gw} locked={locked} live={live} boot={boot} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
+    </div>
+  );
+}
+
+function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, showToast }) {
+  const sc = state.scoring || DEFAULT_SCORING;
+  const selIds = (state.selectedFixtures && state.selectedFixtures[gw]) || [];
+  const selected = selIds.map(id => fixtures.find(f => String(f.id) === String(id))).filter(Boolean);
+  const preds = (myPred.scores && myPred.scores[gw]) || {};
+  const fullName = (short, id) => (boot && boot.teams && boot.teams[id]) ? boot.teams[id].name : short;
+
+  const setHalf = (fid, which, val) => {
+    if (locked) { showToast("Gameweek locked"); return; }
+    const v = val.replace(/[^0-9]/g, "").slice(0,2);
+    const cur = (preds[fid] || "").split("-");
+    const next = which === 0 ? `${v}-${cur[1]||""}` : `${cur[0]||""}-${v}`;
+    updateMyPred(p => ({ ...p, scores: { ...p.scores, [gw]: { ...(p.scores && p.scores[gw]), [fid]: next } } }));
+  };
+
+  if (selected.length === 0) {
+    return <div className="empty"><div className="empty-title">FIXTURES NOT SET</div><p>The admin hasn't selected this gameweek's score-prediction fixtures yet. Check back once they do.</p></div>;
+  }
+  return (
+    <div>
+      {locked && <div className="lock-banner">🔒 Score predictions for GW{gw} are locked.</div>}
+      <p className="helper" style={{ marginBottom:16 }}>Predict the exact scoreline. Outcome = {sc.scoreOutcome} pt · exact = {sc.scoreExact} pts. Predict a total above {sc.gfThreshold} for a shot at the Goal Fest Bonus.</p>
+      {selected.map(f => {
+        const val = preds[f.id] || "";
+        const parts = val.split("-");
+        const p = parseScore(val);
+        const gfEligible = p && (p[0]+p[1]) > sc.gfThreshold;
+        const pts = locked ? scoreFixturePoints(val, f, sc) : null;
+        return (
+          <div key={f.id} className="fixture">
+            <div className="fixture-head">
+              <span>{f.kickoff ? new Date(f.kickoff).toLocaleString(undefined,{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : ("GW"+gw)}</span>
+              <span>{gfEligible ? <span className="gf-tag">⚡ GOAL FEST</span> : ""}</span>
+            </div>
+            <div className="fixture-body">
+              <div className="fx-team home">{fullName(f.teamH, f.teamHId)}</div>
+              <div className="fx-score-in">
+                <input type="number" min="0" max="20" value={parts[0]||""} disabled={locked} placeholder="0" onChange={e=>setHalf(f.id,0,e.target.value)} />
+                <span className="fx-dash">–</span>
+                <input type="number" min="0" max="20" value={parts[1]||""} disabled={locked} placeholder="0" onChange={e=>setHalf(f.id,1,e.target.value)} />
+              </div>
+              <div className="fx-team">{fullName(f.teamA, f.teamAId)}</div>
+            </div>
+            {f.finished && (
+              <div className="fx-result">
+                <span>FT · {f.teamH} {f.hScore}–{f.aScore} {f.teamA}</span>
+                {locked ? <span className="pts">+{pts} pts</span> : <span>picks locked to score</span>}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TeamTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, showToast }) {
+  const sc = state.scoring || DEFAULT_SCORING;
+  const teams = teamsPlayingInGW(fixtures);
+  const pick = (myPred.teamPick && myPred.teamPick[gw]) || null;
+  const fullName = (short) => { const t = boot && boot.teams && Object.values(boot.teams).find(x=>x.short===short); return t ? t.name : short; };
+  // teams appearing in >1 fixture this GW => double gameweek team (need opponent tag)
+  const dgwOpps = {};
+  teams.forEach(t => {
+    const opps = [];
+    fixtures.forEach(f => { if (f.teamH===t) opps.push(f.teamA); else if (f.teamA===t) opps.push(f.teamH); });
+    if (opps.length > 1) dgwOpps[t] = opps;
+  });
+
+  const choose = (team) => {
+    if (locked) { showToast("Gameweek locked"); return; }
+    const usesElsewhere = teamUsesTotal(myPred.teamPick, team) - ((pick && pick.team===team)?1:0);
+    if (usesElsewhere >= sc.teamMaxUses) showToast(`Heads up: you've already used ${team} ${usesElsewhere}× — this pick would score -${sc.teamOverPenalty}`);
+    const oppTag = dgwOpps[team] ? (pick && pick.team===team ? pick.oppTag : "") : "";
+    updateMyPred(p => ({ ...p, teamPick: { ...p.teamPick, [gw]: { team, oppTag } } }));
+  };
+  const setOpp = (opp) => {
+    if (locked || !pick) return;
+    updateMyPred(p => ({ ...p, teamPick: { ...p.teamPick, [gw]: { ...pick, oppTag: opp } } }));
+  };
+
+  let resultLine = null;
+  if (locked && pick && pick.team) {
+    const before = teamUsesBefore(myPred.teamPick, pick.team, gw);
+    const pts = teamPickPoints(pick, fixtures, before, sc);
+    resultLine = <div className="fx-result" style={{ marginTop:16 }}><span>Your pick: {pick.team}{pick.oppTag?` (${pick.oppTag})`:""}</span><span className="pts">{pts>=0?"+":""}{pts} pts</span></div>;
+  }
+
+  if (teams.length === 0) return <div className="empty"><div className="empty-title">NO FIXTURES</div><p>FPL fixtures for GW{gw} aren't available yet.</p></div>;
+  return (
+    <div>
+      {locked && <div className="lock-banner">🔒 Team of the week for GW{gw} is locked.</div>}
+      <p className="helper" style={{ marginBottom:16 }}>Pick ONE team you're backing to win (a draw scores nothing). Win = {sc.teamWin} pts. You can use each team {sc.teamMaxUses}× all season; a 3rd use scores -{sc.teamOverPenalty}.</p>
+      <div className="team-grid">
+        {teams.map(t => {
+          const total = teamUsesTotal(myPred.teamPick, t) - ((pick && pick.team===t)?1:0);
+          const sel = pick && pick.team === t;
+          return (
+            <div key={t} className={"team-chip" + (sel?" selected":"") + (total>=sc.teamMaxUses?" used2":"")} onClick={()=>choose(t)} style={{ cursor: locked?'not-allowed':'pointer' }} title={fullName(t)}>
+              {t}
+              <span className="uses">{total===0?"unused":`used ${total}×`}{dgwOpps[t]?" · DGW":""}</span>
+            </div>
+          );
+        })}
+      </div>
+      {pick && dgwOpps[pick.team] && !locked && (
+        <div className="card" style={{ marginTop:18 }}>
+          <div className="card-title" style={{ fontSize:16 }}>Double gameweek — which {pick.team} fixture?</div>
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+            {dgwOpps[pick.team].map(opp => (
+              <div key={opp} className={"team-chip" + (pick.oppTag===opp?" selected":"")} onClick={()=>setOpp(opp)}>vs {opp}</div>
+            ))}
+          </div>
+          <p className="helper" style={{ marginTop:10 }}>Pick the specific fixture you mean, e.g. {pick.team} ({dgwOpps[pick.team][0]}).</p>
+        </div>
+      )}
+      {resultLine}
+    </div>
+  );
+}
+
+function F4Tab({ state, gw, locked, live, boot, myPred, updateMyPred, showToast }) {
+  const sc = state.scoring || DEFAULT_SCORING;
+  if (!boot || !boot.players) return <div className="empty"><div className="empty-title">PLAYERS LOADING</div><p>FPL player data isn't available yet.</p></div>;
+  const players = boot.players;
+  const teams = boot.teams;
+  const byTeamPos = useMemo(() => playersByTeamPos(players), [players]);
+  const isAvailable = useMemo(() => makeF4Availability(myPred.f4), [myPred.f4]);
+  const f4 = (myPred.f4 && myPred.f4[gw]) || {};
+  const slotKey = { GK:"gk", DEF:"def", MID:"mid", FWD:"fwd" };
+
+  const setPlayer = (pos, playerId) => {
+    if (locked) { showToast("Gameweek locked"); return; }
+    updateMyPred(p => ({ ...p, f4: { ...p.f4, [gw]: { ...(p.f4 && p.f4[gw]), [slotKey[pos]]: playerId || undefined } } }));
+  };
+
+  const teamList = Object.values(teams || {}).sort((a,b)=>a.name.localeCompare(b.name));
+  const sum = f4Points(f4, live, sc);
+
+  return (
+    <div>
+      {locked && <div className="lock-banner">🔒 Fantastic Four for GW{gw} is locked.</div>}
+      <p className="helper" style={{ marginBottom:16 }}>Pick one player per position. You score the sum of their real FPL points this gameweek (bonuses included). DEF/MID: once all season. GK/FWD: twice, once per half. Used players disappear from the menus.</p>
+      {POSITIONS.map(pos => {
+        const currentId = f4[slotKey[pos]];
+        const current = currentId ? players[currentId] : null;
+        return (
+          <F4Slot key={pos} pos={pos} gw={gw} locked={locked}
+            current={current} teams={teamList} byTeamPos={byTeamPos}
+            isAvailable={isAvailable} live={live}
+            onPick={(pid)=>setPlayer(pos, pid)} />
+        );
+      })}
+      <div className="card" style={{ marginTop:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <div className="card-title" style={{ margin:0, fontSize:18 }}>Fantastic Four total (GW{gw})</div>
+        <div style={{ fontFamily:'Anton', fontSize:32, color:'var(--accent-2)' }}>{sum}</div>
+      </div>
+    </div>
+  );
+}
+
+function F4Slot({ pos, gw, locked, current, teams, byTeamPos, isAvailable, live, onPick }) {
+  const [teamId, setTeamId] = useState(current ? current.teamId : "");
+  useEffect(() => { setTeamId(current ? current.teamId : ""); }, [current && current.id]);
+
+  const poolAll = teamId && byTeamPos[teamId] ? byTeamPos[teamId][pos] : [];
+  // available players in this team+pos (plus the currently-selected one so it stays visible)
+  const pool = poolAll.filter(pl => isAvailable(pl.id, pos, gw) || (current && current.id === pl.id));
+  const pts = current ? (Number(live[current.id]) || 0) : null;
+
+  return (
+    <div className="f4-slot">
+      <div className="f4-slot-title">{POS_LABEL[pos]}{current ? <span style={{ float:'right', fontFamily:'Anton', color:'var(--accent-2)' }}>{locked || (live && live[current.id]!=null) ? `${pts} pts` : ""}</span> : null}</div>
+      <div className="f4-row">
+        <select value={teamId} disabled={locked} onChange={e=>{ setTeamId(e.target.value ? parseInt(e.target.value,10) : ""); }}>
+          <option value="">— team —</option>
+          {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+        <select value={current ? current.id : ""} disabled={locked || !teamId} onChange={e=>onPick(e.target.value ? parseInt(e.target.value,10) : "")}>
+          <option value="">{teamId ? "— player —" : "pick team first"}</option>
+          {pool.map(pl => (
+            <option key={pl.id} value={pl.id}>{pl.name}{pl.status && pl.status!=='a' ? " ⚠" : ""}</option>
+          ))}
+        </select>
+      </div>
+      {current && <div className="helper" style={{ marginTop:8 }}>Selected: <strong style={{ color:'var(--ink)' }}>{current.name}</strong> ({current.teamShort}){current.status && current.status!=='a' ? " · ⚠ flagged (injury/doubt) in FPL" : ""}</div>}
+    </div>
+  );
+}
+
+// ============================================================
+// PICKS — see everyone's picks for LOCKED gameweeks
+// ============================================================
+function PicksView({ state, users, currentUser, fpl }) {
+  const lockedGWs = Object.keys(state.locks || {}).filter(g => state.locks[g]).map(g => parseInt(g,10)).sort((a,b)=>b-a);
+  const [gw, setGw] = useState(lockedGWs[0] || null);
+  useEffect(() => { if (gw == null && lockedGWs.length) setGw(lockedGWs[0]); }, [lockedGWs.length]);
+
+  if (lockedGWs.length === 0) {
+    return (
+      <div>
+        <div className="page-head"><div className="eyebrow">EVERYONE'S PICKS</div><h1 className="page-title">THE <span className="it">picks.</span></h1></div>
+        <div className="empty"><div className="empty-title">NOTHING LOCKED YET</div><p>Picks stay hidden until the admin locks a gameweek. Once a GW is locked, everyone's predictions show up here.</p></div>
+      </div>
+    );
+  }
+
+  const fixtures = (fpl.fixturesByGW && fpl.fixturesByGW[gw]) || [];
+  const boot = fpl.boot;
+  const selIds = (state.selectedFixtures && state.selectedFixtures[gw]) || [];
+  const selFixtures = selIds.map(id => fixtures.find(f => String(f.id)===String(id))).filter(Boolean);
+  const players = (boot && boot.players) || {};
+  const named = (users || []).filter(u => u.name).sort((a,b)=>a.name.localeCompare(b.name));
+
+  return (
+    <div>
+      <div className="page-head">
+        <div className="eyebrow">EVERYONE'S PICKS · LOCKED</div>
+        <h1 className="page-title">THE <span className="it">picks.</span></h1>
+        <p className="page-sub">All predictions for locked gameweeks, out in the open.</p>
+      </div>
+      <div className="field" style={{ maxWidth:220 }}>
+        <label>Gameweek</label>
+        <select value={gw||""} onChange={e=>setGw(parseInt(e.target.value,10))}>
+          {lockedGWs.map(g => <option key={g} value={g}>GW{g}</option>)}
+        </select>
+      </div>
+
+      <div className="card" style={{ marginBottom:18, overflowX:'auto' }}>
+        <div className="card-title">Score Predictions</div>
+        {selFixtures.length === 0 ? <div className="empty-mini">No fixtures were selected for this GW.</div> : (
+          <table className="lb-table" style={{ minWidth:520 }}>
+            <thead><tr><th>Pundit</th>{selFixtures.map(f => <th key={f.id} style={{textAlign:'center'}}>{f.teamH}v{f.teamA}</th>)}</tr></thead>
+            <tbody>
+              {named.map(u => {
+                const preds = (u.scores && u.scores[gw]) || {};
+                return <tr key={u.name}><td style={{fontWeight:600}}>{u.name}{u.name===currentUser?" · you":""}</td>
+                  {selFixtures.map(f => <td key={f.id} style={{textAlign:'center', fontFamily:'JetBrains Mono'}}>{preds[f.id]||"—"}</td>)}
+                </tr>;
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="grid grid-2">
+        <div className="card">
+          <div className="card-title">Team of the Week</div>
+          <table className="lb-table">
+            <thead><tr><th>Pundit</th><th>Pick</th></tr></thead>
+            <tbody>
+              {named.map(u => { const tp = (u.teamPick && u.teamPick[gw]) || null;
+                return <tr key={u.name}><td style={{fontWeight:600}}>{u.name}{u.name===currentUser?" · you":""}</td>
+                  <td style={{fontFamily:'JetBrains Mono'}}>{tp && tp.team ? tp.team + (tp.oppTag?` (${tp.oppTag})`:"") : "—"}</td></tr>;
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="card">
+          <div className="card-title">Fantastic Four</div>
+          <table className="lb-table">
+            <thead><tr><th>Pundit</th><th>GK</th><th>DEF</th><th>MID</th><th>FWD</th></tr></thead>
+            <tbody>
+              {named.map(u => { const f4 = (u.f4 && u.f4[gw]) || {};
+                const nm = id => id && players[id] ? players[id].name : "—";
+                return <tr key={u.name}><td style={{fontWeight:600}}>{u.name}{u.name===currentUser?" · you":""}</td>
+                  <td>{nm(f4.gk)}</td><td>{nm(f4.def)}</td><td>{nm(f4.mid)}</td><td>{nm(f4.fwd)}</td></tr>;
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// LEADERBOARD
+// ============================================================
+function LeaderboardView({ standings, currentUser, state, fplBusy, onRefresh }) {
+  const [expanded, setExpanded] = useState(null);
+  return (
+    <div>
+      <div className="page-head">
+        <div className="eyebrow">SEASON STANDINGS · {state.season}</div>
+        <h1 className="page-title">THE <span className="it">table.</span></h1>
+        <p className="page-sub">Live through GW{state.activeGW}. Points update automatically as FPL results and player scores come in.</p>
+      </div>
+      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:16 }}>
+        <button className="btn btn-ghost btn-sm" onClick={onRefresh} disabled={fplBusy}>{fplBusy?"↻ Refreshing…":"↻ Refresh results"}</button>
+      </div>
+      {standings.length === 0 ? (
+        <div className="empty"><div className="empty-title">NO POINTS YET</div><p>Once results land, the table fills in here.</p></div>
+      ) : (
+        <div className="card" style={{ overflowX:'auto', padding:0 }}>
+          <table className="lb-table" style={{ minWidth:640 }}>
+            <thead><tr><th>#</th><th>Pundit</th><th style={{textAlign:'right'}}>Scores</th><th style={{textAlign:'right'}}>Team</th><th style={{textAlign:'right'}}>F4</th><th style={{textAlign:'right'}}>Total</th></tr></thead>
+            <tbody>
+              {standings.map((s, i) => (
+                <React.Fragment key={s.name}>
+                  <tr onClick={()=>setExpanded(expanded===s.name?null:s.name)} style={{ cursor:'pointer' }}>
+                    <td className={"lb-rank" + (i===0?" gold":i===1?" silver":i===2?" bronze":"")}>{i+1}</td>
+                    <td style={{ fontWeight:600 }}>{s.name}{s.name===currentUser?<span style={{color:'var(--accent-2)'}}> · you</span>:""}</td>
+                    <td style={{textAlign:'right', fontFamily:'JetBrains Mono'}}>{s.breakdown.scores}</td>
+                    <td style={{textAlign:'right', fontFamily:'JetBrains Mono'}}>{s.breakdown.team}</td>
+                    <td style={{textAlign:'right', fontFamily:'JetBrains Mono'}}>{s.breakdown.f4}</td>
+                    <td className="lb-total">{s.total}</td>
+                  </tr>
+                  {expanded===s.name && (
+                    <tr><td colSpan={6} style={{ background:'var(--bg-2)' }}>
+                      <div style={{ padding:'6px 4px' }}>
+                        <div className="lb-breakdown" style={{ marginBottom:8 }}>
+                          <span>Gameweek-by-gameweek</span>
+                        </div>
+                        {Object.keys(s.perGW).length === 0 ? <div className="empty-mini">No scored gameweeks yet.</div> : (
+                          <div className="lb-breakdown">
+                            {Object.entries(s.perGW).sort((a,b)=>parseInt(a[0])-parseInt(b[0])).map(([g,v]) => (
+                              <span key={g}>GW{g}<strong>{v.total}</strong></span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </td></tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="helper" style={{ marginTop:14 }}>Tap a row to see the gameweek-by-gameweek split. Scores = predictions · Team = team of the week · F4 = Fantastic Four.</p>
+    </div>
+  );
+}
+
+// ============================================================
+// CSV HELPERS
+// ============================================================
+function csvEscape(v) {
+  const s = (v == null ? "" : String(v));
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function downloadCSV(filename, rows) {
+  const content = rows.map(r => r.map(csvEscape).join(",")).join("\n");
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+function buildPicksCSV(users, state, fpl) {
+  const players = (fpl.boot && fpl.boot.players) || {};
+  const rows = [["Pundit","Gameweek","Section","Item","Pick","EditedAt"]];
+  const maxGW = state.activeGW || 1;
+  (users || []).filter(u=>u.name).sort((a,b)=>a.name.localeCompare(b.name)).forEach(u => {
+    const edited = u.lastEdited ? new Date(u.lastEdited).toISOString() : "";
+    for (let gw = 1; gw <= maxGW; gw++) {
+      const selIds = (state.selectedFixtures && state.selectedFixtures[gw]) || [];
+      const fixtures = (fpl.fixturesByGW && fpl.fixturesByGW[gw]) || [];
+      const preds = (u.scores && u.scores[gw]) || {};
+      selIds.forEach(fid => {
+        const fx = fixtures.find(f => String(f.id)===String(fid));
+        const label = fx ? `${fx.teamH}v${fx.teamA}` : ("fixture "+fid);
+        if (preds[fid]) rows.push([u.name, gw, "Score", label, preds[fid], edited]);
+      });
+      const tp = (u.teamPick && u.teamPick[gw]) || null;
+      if (tp && tp.team) rows.push([u.name, gw, "Team", "Team of the Week", tp.team + (tp.oppTag?` (${tp.oppTag})`:""), edited]);
+      const f4 = (u.f4 && u.f4[gw]) || null;
+      if (f4) ["gk","def","mid","fwd"].forEach(slot => {
+        if (f4[slot]) rows.push([u.name, gw, "F4", slot.toUpperCase(), players[f4[slot]]?players[f4[slot]].name:("player "+f4[slot]), edited]);
+      });
+    }
+  });
+  return rows;
+}
+function buildResultsCSV(users, state, fpl) {
+  const rows = [["Pundit","Gameweek","ScorePts","TeamPts","F4Pts","GWTotal"]];
+  (users || []).filter(u=>u.name).forEach(u => {
+    const season = computeUserSeason(u, state, fpl);
+    Object.entries(season.perGW).sort((a,b)=>parseInt(a[0])-parseInt(b[0])).forEach(([gw,v]) => {
+      rows.push([u.name, gw, v.scores, v.team, v.f4, v.total]);
+    });
+  });
+  return rows;
+}
+function buildLeaderboardCSV(standings) {
+  const rows = [["Rank","Pundit","ScorePts","TeamPts","F4Pts","Total"]];
+  standings.forEach((s,i) => rows.push([i+1, s.name, s.breakdown.scores, s.breakdown.team, s.breakdown.f4, s.total]));
+  return rows;
+}
+
+// ============================================================
+// ADMIN
+// ============================================================
+function AdminView({ state, users, standings, fpl, updateState, isAdmin, setIsAdmin, adminRole, setAdminRole, showToast, onRefresh }) {
+  const [u, setU] = useState(""); const [p, setP] = useState(""); const [err, setErr] = useState("");
+
+  const doLogin = () => {
+    if (u === ADMIN_USERNAME && p === ADMIN_PASSWORD) { setIsAdmin(true); setAdminRole("full"); setErr(""); return; }
+    const ex = EXPORT_LOGINS.find(x => x.username === u && x.password === p);
+    if (ex) { setIsAdmin(true); setAdminRole("export"); setErr(""); return; }
+    setErr("Wrong username or password");
+  };
+
+  if (!isAdmin) {
+    return (
+      <div>
+        <div className="page-head"><div className="eyebrow">RESTRICTED</div><h1 className="page-title">ADMIN <span className="it">only.</span></h1></div>
+        <div className="login-card" style={{ maxWidth:420, margin:'0 auto' }}>
+          <div className="field"><label>Username</label><input value={u} onChange={e=>setU(e.target.value)} placeholder="admin username" /></div>
+          <div className="field"><label>Password</label><input type="password" value={p} onChange={e=>setP(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doLogin()} placeholder="admin password" /></div>
+          {err && <div style={{ color:'var(--red)', fontSize:13, marginBottom:12 }}>{err}</div>}
+          <button className="btn btn-primary" onClick={doLogin} style={{ width:'100%', justifyContent:'center' }}>Enter →</button>
+        </div>
+      </div>
+    );
+  }
+  if (adminRole === "export") return <ExportOnlyDashboard users={users} standings={standings} state={state} fpl={fpl} />;
+  return <AdminDashboard state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} showToast={showToast} onRefresh={onRefresh} />;
+}
+
+function ExportOnlyDashboard({ users, standings, state, fpl }) {
+  return (
+    <div>
+      <div className="page-head"><div className="eyebrow">DATA EXPORT</div><h1 className="page-title">EXPORT <span className="it">only.</span></h1>
+        <p className="page-sub">Download the league data as CSV. This login can't change any settings.</p></div>
+      <div className="grid grid-3">
+        <div className="card"><div className="card-title" style={{fontSize:18}}>Picks</div><p className="helper">Every pundit's predictions (scores, team, F4) with edit timestamps.</p>
+          <button className="btn btn-go" style={{ marginTop:14, width:'100%', justifyContent:'center' }} onClick={()=>downloadCSV("propundit_picks.csv", buildPicksCSV(users, state, fpl))}>⬇ Picks CSV</button></div>
+        <div className="card"><div className="card-title" style={{fontSize:18}}>Results</div><p className="helper">Per-gameweek points for each pundit across all three sections.</p>
+          <button className="btn btn-go" style={{ marginTop:14, width:'100%', justifyContent:'center' }} onClick={()=>downloadCSV("propundit_results.csv", buildResultsCSV(users, state, fpl))}>⬇ Results CSV</button></div>
+        <div className="card"><div className="card-title" style={{fontSize:18}}>Leaderboard</div><p className="helper">Season totals and section breakdown, ranked.</p>
+          <button className="btn btn-go" style={{ marginTop:14, width:'100%', justifyContent:'center' }} onClick={()=>downloadCSV("propundit_leaderboard.csv", buildLeaderboardCSV(standings))}>⬇ Leaderboard CSV</button></div>
+      </div>
+    </div>
+  );
+}
+
+function AdminDashboard({ state, users, standings, fpl, updateState, showToast, onRefresh }) {
+  const boot = fpl.boot;
+  const activeGW = state.activeGW || 1;
+  const fixtures = (fpl.fixturesByGW && fpl.fixturesByGW[activeGW]) || [];
+  const selIds = (state.selectedFixtures && state.selectedFixtures[activeGW]) || [];
+
+  const setActiveGW = (v) => { const n = Math.max(1, Math.min(TOTAL_GW, v)); updateState(s => ({ ...s, activeGW: n })); };
+  const toggleLock = (gw) => updateState(s => ({ ...s, locks: { ...s.locks, [gw]: !s.locks[gw] } }));
+  const toggleFixture = (fid) => updateState(s => {
+    const cur = (s.selectedFixtures && s.selectedFixtures[activeGW]) || [];
+    const next = cur.map(String).includes(String(fid)) ? cur.filter(x => String(x)!==String(fid)) : [...cur, fid];
+    return { ...s, selectedFixtures: { ...s.selectedFixtures, [activeGW]: next } };
+  });
+  const setScoring = (key, v) => updateState(s => ({ ...s, scoring: { ...(s.scoring||DEFAULT_SCORING), [key]: Number(v) } }));
+
+  const resetAll = async () => {
+    if (!window.confirm("Wipe ALL league data (every pundit's picks AND all settings)? This cannot be undone.")) return;
+    if (!window.confirm("Really sure? Type-check: this deletes everything under pp_. Click OK to proceed.")) return;
+    await remoteWipePrefix("pp_");
+    try { Object.keys(localStorage).filter(k=>k.startsWith("pp_")).forEach(k=>localStorage.removeItem(k)); } catch {}
+    showToast("All data wiped. Reload the page.");
+  };
+
+  const sc = state.scoring || DEFAULT_SCORING;
+  const scoringFields = [
+    ["scoreOutcome","Score · correct outcome"],["scoreExact","Score · exact result"],
+    ["gfOutcome","Goal Fest · outcome bonus"],["gfExact","Goal Fest · exact bonus"],["gfThreshold","Goal Fest · total must exceed"],
+    ["teamWin","Team · correct win"],["teamOverPenalty","Team · over-limit penalty"],["teamMaxUses","Team · max uses/season"],
+    ["f4Multiplier","F4 · points multiplier"],
+  ];
+
+  return (
+    <div>
+      <div className="page-head"><div className="eyebrow">CONTROL ROOM</div><h1 className="page-title">ADMIN <span className="it">deck.</span></h1></div>
+
+      <div className="grid grid-2">
+        <div className="card">
+          <div className="card-title">Gameweek</div>
+          <p className="helper" style={{ marginBottom:12 }}>FPL current GW: <strong style={{color:'var(--ink)'}}>{boot && boot.currentGW ? boot.currentGW : "—"}</strong>{boot && boot.nextGW ? ` · next: ${boot.nextGW}` : ""}. Set the gameweek pundits are predicting.</p>
+          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+            <button className="btn" onClick={()=>setActiveGW(activeGW-1)}>−</button>
+            <div style={{ fontFamily:'Anton', fontSize:44, minWidth:80, textAlign:'center' }}>{activeGW}</div>
+            <button className="btn" onClick={()=>setActiveGW(activeGW+1)}>+</button>
+            {boot && boot.currentGW && boot.currentGW!==activeGW && <button className="btn btn-ghost btn-sm" onClick={()=>setActiveGW(boot.currentGW)}>Match FPL (GW{boot.currentGW})</button>}
+          </div>
+          <div style={{ marginTop:16 }}>
+            <button className="btn btn-ghost btn-sm" onClick={onRefresh}>↻ Refresh FPL data</button>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-title">Locks</div>
+          <p className="helper" style={{ marginBottom:12 }}>Lock a gameweek right after its FPL deadline. Locking freezes picks and reveals them on the Picks tab.</p>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+            {Array.from({length: activeGW}, (_,i)=>i+1).map(gw => {
+              const on = !!(state.locks||{})[gw];
+              return <button key={gw} className={"team-chip" + (on?" selected":"")} onClick={()=>toggleLock(gw)} style={{ minWidth:64 }}>
+                GW{gw}<span className="uses">{on?"🔒 locked":"open"}</span></button>;
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop:18 }}>
+        <div className="card-title">Score-prediction fixtures · GW{activeGW}
+          <span style={{ fontFamily:'JetBrains Mono', fontSize:12, color: selIds.length===state.scoresPerGW?'var(--accent-2)':'var(--ink-mute)' }}>{selIds.length} selected (target {state.scoresPerGW}{fixtures.length>state.scoresPerGW?", +extras for DGW":""})</span>
+        </div>
+        {fixtures.length === 0 ? <div className="empty-mini">No FPL fixtures loaded for GW{activeGW}. Hit “Refresh FPL data”. (Fixtures only load once deployed on Vercel.)</div> : (
+          <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+            {fixtures.map(f => {
+              const on = selIds.map(String).includes(String(f.id));
+              return <button key={f.id} className={"team-chip" + (on?" selected":"")} onClick={()=>toggleFixture(f.id)} style={{ minWidth:110 }}>
+                {f.teamH} v {f.teamA}<span className="uses">{f.kickoff?new Date(f.kickoff).toLocaleDateString(undefined,{month:'short',day:'numeric'}):""}{on?" · counts":""}</span></button>;
+            })}
+          </div>
+        )}
+        <p className="helper" style={{ marginTop:10 }}>Pick the {state.scoresPerGW} fixtures that count for score predictions this GW. Add a couple more in double gameweeks.</p>
+      </div>
+
+      <div className="card" style={{ marginTop:18 }}>
+        <div className="card-title">Scoring</div>
+        <div className="grid grid-3">
+          {scoringFields.map(([key,label]) => (
+            <div className="field" key={key} style={{ marginBottom:0 }}>
+              <label>{label}</label>
+              <input type="number" value={sc[key]} onChange={e=>setScoring(key, e.target.value)} />
+            </div>
+          ))}
+        </div>
+        <p className="helper" style={{ marginTop:12 }}>Changing these recomputes every score instantly. Defaults match the classic Pro Pundit rules.</p>
+      </div>
+
+      <div className="card" style={{ marginTop:18 }}>
+        <div className="card-title">Export data</div>
+        <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+          <button className="btn btn-go btn-sm" onClick={()=>downloadCSV("propundit_picks.csv", buildPicksCSV(users, state, fpl))}>⬇ Picks CSV</button>
+          <button className="btn btn-go btn-sm" onClick={()=>downloadCSV("propundit_results.csv", buildResultsCSV(users, state, fpl))}>⬇ Results CSV</button>
+          <button className="btn btn-go btn-sm" onClick={()=>downloadCSV("propundit_leaderboard.csv", buildLeaderboardCSV(standings))}>⬇ Leaderboard CSV</button>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop:18, borderColor:'rgba(255,77,77,0.3)' }}>
+        <div className="card-title" style={{ color:'var(--red)' }}>Danger zone</div>
+        <p className="helper" style={{ marginBottom:12 }}>Wipes every pundit's account and picks plus all settings. There's no undo — export a backup first.</p>
+        <button className="btn btn-danger btn-sm" onClick={resetAll}>Wipe all league data</button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// MOUNT
+// ============================================================
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "name": "pro-pundit-league",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pro Pundit League — Premier League prediction game",
+  "dependencies": {
+    "@upstash/redis": "^1.34.0"
+  }
+}
