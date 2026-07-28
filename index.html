@@ -137,6 +137,30 @@
   .fxrow .tn { font-weight:600; font-size:14px; }
   .fx-daygroup { margin-top:20px; }
   .fx-dayhdr { font-family:'JetBrains Mono'; font-size:11px; letter-spacing:0.14em; color:var(--ink-mute); text-transform:uppercase; margin:0 0 10px; }
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.72); display:flex; align-items:flex-start; justify-content:center; padding:24px 16px; z-index:200; overflow:auto; }
+  .modal { background:#14141c; border:1px solid var(--line); border-radius:12px; width:100%; max-width:680px; box-shadow:0 24px 60px rgba(0,0,0,0.5); }
+  .modal-head { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); }
+  .modal-head h3 { margin:0; font-family:'Anton'; font-size:22px; letter-spacing:0.02em; }
+  .modal-body { padding:16px 20px; max-height:64vh; overflow:auto; }
+  .modal-foot { padding:14px 20px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:10px; }
+  .pk-controls { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
+  .pk-controls .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .pk-input, .pk-select { width:100%; background:var(--bg-2); border:1px solid var(--line); color:var(--ink); padding:10px 12px; border-radius:6px; font-size:14px; }
+  .pcard { display:flex; align-items:center; gap:12px; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--bg-2); margin-bottom:8px; }
+  .pcard .pinfo { flex:1; min-width:0; }
+  .pcard .pname { font-weight:700; font-size:15px; }
+  .pmeta { font-family:'JetBrains Mono'; font-size:11px; color:var(--ink-mute); margin-top:3px; letter-spacing:0.02em; }
+  .pmeta b { color:var(--ink-dim); font-weight:700; }
+  .pcard .pacts { display:flex; gap:6px; flex-shrink:0; }
+  .statdot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+  .f4card { display:flex; align-items:center; gap:14px; padding:14px 16px; border:1px solid var(--line); border-radius:10px; background:var(--bg-2); }
+  .f4card .slotpos { font-family:'JetBrains Mono'; font-size:11px; letter-spacing:0.14em; color:var(--ink-mute); }
+  .f4card .fname { font-family:'Anton'; font-size:20px; line-height:1.15; }
+  .cmp { display:grid; grid-template-columns:1fr auto 1fr; gap:12px; align-items:stretch; }
+  .cmp .col { border:1px solid var(--line); border-radius:8px; padding:14px; background:var(--bg-2); }
+  .cmp .col h4 { margin:0 0 10px; font-family:'JetBrains Mono'; font-size:10px; letter-spacing:0.14em; color:var(--ink-mute); text-align:center; }
+  .cmp .vs { align-self:center; font-family:'Anton'; color:var(--ink-mute); }
+  .cmp .stat-line { display:flex; justify-content:space-between; font-size:13px; padding:5px 0; border-top:1px solid var(--line); }
 
   .f4-slot { background: var(--bg-2); border: 1px solid var(--line); border-radius: 6px; padding: 16px; margin-bottom: 12px; }
   .f4-slot-title { font-family: 'Anton', sans-serif; font-size: 16px; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 10px; color: var(--accent-2); }
@@ -363,6 +387,7 @@ function defaultState() {
   return {
     season: "2025/26",
     activeGW: 1,
+    openGWs: [1],           // gameweeks the admin has opened for predictions
     scoresPerGW: 5,
     locks: {},              // { [gw]: true }  (locked => frozen + visible)
     selectedFixtures: {},   // { [gw]: [fixtureId,...] } which fixtures count for score predictions
@@ -601,6 +626,7 @@ function App() {
     if (!s.bonus) { s.bonus = {}; save = true; }
     if (s.survivorEnabled === undefined) { s.survivorEnabled = true; save = true; }
     if (!s.activeGW) { s.activeGW = 1; save = true; }
+    if (!s.openGWs || !s.openGWs.length) { s.openGWs = [s.activeGW || 1]; save = true; }
     if (save && apiReady) await setShared("pp_state", s);
     setState(s);
     return s;
@@ -622,8 +648,10 @@ function App() {
     try {
       const boot = await fplBootstrap(force);
       const active = st.activeGW || 1;
+      const open = (st.openGWs && st.openGWs.length) ? st.openGWs : [];
+      const maxGW = Math.min(TOTAL_GW, Math.max(active, ...(open.length ? open : [active])));
       const fixturesByGW = {}, liveByGW = {};
-      for (let gw = 1; gw <= active; gw++) {
+      for (let gw = 1; gw <= maxGW; gw++) {
         const f = (force && gw === active);
         fixturesByGW[gw] = await fplFixtures(gw, f);
         liveByGW[gw] = await fplLive(gw, f);
@@ -1014,6 +1042,38 @@ function opponentsInGW(fixtures, team) {
   (fixtures || []).forEach(f => { if (f.teamH === team) out.push("vs " + f.teamA); else if (f.teamA === team) out.push("@ " + f.teamH); });
   return out;
 }
+function teamFixturesInGW(fixtures, team) {
+  const out = [];
+  (fixtures || []).forEach(f => {
+    if (f.teamH === team) out.push({ opp: f.teamA, ha: "H" });
+    else if (f.teamA === team) out.push({ opp: f.teamH, ha: "A" });
+  });
+  return out;
+}
+function teamRecentForm(fixturesByGW, team, uptoGW) {
+  const res = [];
+  Object.keys(fixturesByGW || {}).map(Number).filter(g => g <= uptoGW).forEach(g => {
+    (fixturesByGW[g] || []).forEach(f => {
+      if (!f.finished || f.hScore == null || f.aScore == null) return;
+      if (f.teamH === team) res.push({ gw: g, opp: f.teamA, ha: "H", r: f.hScore > f.aScore ? "W" : f.hScore < f.aScore ? "L" : "D", k: f.kickoff });
+      else if (f.teamA === team) res.push({ gw: g, opp: f.teamH, ha: "A", r: f.aScore > f.hScore ? "W" : f.aScore < f.hScore ? "L" : "D", k: f.kickoff });
+    });
+  });
+  res.sort((a, b) => (a.gw - b.gw) || (new Date(a.k || 0) - new Date(b.k || 0)));
+  return res.slice(-5);
+}
+function playerFixtureLabels(fixtures, teamsById, teamId) {
+  const short = teamsById && teamsById[teamId] ? teamsById[teamId].short : null;
+  if (!short) return [];
+  return teamFixturesInGW(fixtures, short).map(x => x.opp + " (" + x.ha + ")");
+}
+function fmtTSB(v) { return (v == null || v === "") ? "\u2014" : (String(v) + "%"); }
+function fmtNum(v) { return (v == null || v === "") ? "\u2014" : String(v); }
+function statusInfo(pl) {
+  if (!pl || pl.status === "a" || !pl.status) return { ok: true, label: "Available", color: "var(--accent-2)" };
+  const map = { i: "Injured", s: "Suspended", d: "Doubtful", u: "Unavailable" };
+  return { ok: false, label: map[pl.status] || "Flagged", color: "var(--red)" };
+}
 function teamCodeByShort(boot, short) {
   if (!boot || !boot.teams) return null;
   const t = Object.values(boot.teams).find(x => x.short === short);
@@ -1033,10 +1093,18 @@ function TeamBadge({ short, code, boot, size, className }) {
 }
 
 function FixturesView({ state, fpl }) {
-  const gw = state.activeGW || 1;
   const boot = fpl.boot;
+  const [selGW, setSelGW] = useState(state.activeGW || 1);
+  const [extra, setExtra] = useState({});
+  useEffect(() => {
+    let alive = true;
+    const have = (fpl.fixturesByGW && fpl.fixturesByGW[selGW]) || extra[selGW];
+    if (!have) { fplFixtures(selGW).then(fx => { if (alive) setExtra(e => ({ ...e, [selGW]: fx || [] })); }).catch(()=>{}); }
+    return () => { alive = false; };
+  }, [selGW]);
   const codeOf = (id, short) => (boot && boot.teams && boot.teams[id] && boot.teams[id].code != null) ? boot.teams[id].code : teamCodeByShort(boot, short);
-  const fixtures = ((fpl.fixturesByGW && fpl.fixturesByGW[gw]) || []).slice().sort((a,b) => {
+  const raw = (fpl.fixturesByGW && fpl.fixturesByGW[selGW]) || extra[selGW] || [];
+  const fixtures = raw.slice().sort((a,b) => {
     const ka = a.kickoff ? new Date(a.kickoff).getTime() : 8.64e15;
     const kb = b.kickoff ? new Date(b.kickoff).getTime() : 8.64e15;
     return ka - kb;
@@ -1049,13 +1117,21 @@ function FixturesView({ state, fpl }) {
   return (
     <div>
       <div className="page-head">
-        <div className="eyebrow">FIXTURES · GAMEWEEK {gw}</div>
-        <h1 className="page-title">GW{gw} <span className="it">fixtures.</span></h1>
-        <p className="page-sub">Every match this gameweek — use it to plan your team of the week and survivor pick.</p>
+        <div className="eyebrow">FIXTURES \u00b7 GAMEWEEK {selGW}</div>
+        <h1 className="page-title">Match <span className="it">week.</span></h1>
+        <p className="page-sub">Browse any gameweek \u2014 use it to plan your team of the week and survivor pick.</p>
       </div>
-      {!boot && <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>⚠️ Couldn't load FPL fixtures. They load once deployed on Vercel; if you're live, hit Refresh on the Home tab.</div>}
+      <div className="card" style={{ marginBottom:20, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+        <span style={{ fontFamily:'JetBrains Mono', fontSize:12, letterSpacing:'0.1em', color:'var(--ink-mute)' }}>GAMEWEEK</span>
+        <button className="btn btn-sm" onClick={()=>setSelGW(g => Math.max(1, g-1))}>\u2212</button>
+        <select value={selGW} onChange={e=>setSelGW(parseInt(e.target.value,10))} style={{ background:'var(--bg-2)', border:'1px solid var(--line)', color:'var(--ink)', padding:'8px 12px', borderRadius:4, fontWeight:600 }}>
+          {Array.from({length: TOTAL_GW}, (_,i)=>i+1).map(g => <option key={g} value={g}>Gameweek {g}{g===(state.activeGW||1) ? " \u00b7 current" : ""}</option>)}
+        </select>
+        <button className="btn btn-sm" onClick={()=>setSelGW(g => Math.min(TOTAL_GW, g+1))}>+</button>
+      </div>
+      {!boot && <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>\u26a0\ufe0f Couldn't load FPL fixtures. They load once deployed on Vercel; if you're live, hit Refresh on the Home tab.</div>}
       {fixtures.length === 0 ? (
-        <div className="empty"><div className="empty-title">NO FIXTURES YET</div><p>FPL fixtures for GW{gw} aren't available yet. They usually appear once the schedule is confirmed.</p></div>
+        <div className="empty"><div className="empty-title">NO FIXTURES YET</div><p>FPL fixtures for GW{selGW} aren't available yet. They usually appear once the schedule is confirmed.</p></div>
       ) : Object.entries(groups).map(([day, fx]) => (
         <div key={day} className="fx-daygroup">
           <p className="fx-dayhdr">{day}</p>
@@ -1065,7 +1141,7 @@ function FixturesView({ state, fpl }) {
               return (
                 <div key={f.id} className="fxrow">
                   <div className="side home"><span className="tn">{f.teamH}</span><TeamBadge short={f.teamH} code={codeOf(f.teamHId, f.teamH)} boot={boot} size={30} /></div>
-                  <div className="mid">{f.finished ? <span className="sc">{f.hScore}–{f.aScore}</span> : <span>{time}</span>}<div style={{ marginTop:3, fontSize:10, letterSpacing:'0.1em' }}>{f.finished ? "FT" : ""}</div></div>
+                  <div className="mid">{f.finished ? <span className="sc">{f.hScore}\u2013{f.aScore}</span> : <span>{time}</span>}<div style={{ marginTop:3, fontSize:10, letterSpacing:'0.1em' }}>{f.finished ? "FT" : ""}</div></div>
                   <div className="side away"><TeamBadge short={f.teamA} code={codeOf(f.teamAId, f.teamA)} boot={boot} size={30} /><span className="tn">{f.teamA}</span></div>
                 </div>
               );
@@ -1089,7 +1165,10 @@ function playersByTeamPos(players) {
 
 function PredictView({ state, myPred, users, fpl, updateMyPred, showToast }) {
   const [tab, setTab] = useState("scores");
-  const gw = state.activeGW || 1;
+  const openGWs = (state.openGWs && state.openGWs.length) ? state.openGWs.slice() : [state.activeGW || 1];
+  const selectable = Array.from(new Set([...openGWs, state.activeGW || 1])).sort((a, b) => a - b);
+  const [gw, setGw] = useState(state.activeGW || 1);
+  useEffect(() => { if (!selectable.includes(gw)) setGw(state.activeGW || 1); }, [selectable.join(","), state.activeGW]);
   const locked = !!(state.locks || {})[gw];
   const fixtures = (fpl.fixturesByGW && fpl.fixturesByGW[gw]) || [];
   const live = (fpl.liveByGW && fpl.liveByGW[gw]) || {};
@@ -1106,6 +1185,16 @@ function PredictView({ state, myPred, users, fpl, updateMyPred, showToast }) {
 
       {!boot && <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>⚠️ Couldn't load FPL data (teams/players/fixtures). It works once deployed on Vercel; if you're seeing this live, hit Refresh on the Home tab.</div>}
 
+      {selectable.length > 1 && (
+        <div className="card" style={{ marginBottom:20, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+          <span style={{ fontFamily:'JetBrains Mono', fontSize:12, letterSpacing:'0.1em', color:'var(--ink-mute)' }}>PREDICTING FOR</span>
+          <select value={gw} onChange={e=>setGw(parseInt(e.target.value,10))} style={{ background:'var(--bg-2)', border:'1px solid var(--line)', color:'var(--ink)', padding:'8px 12px', borderRadius:4, fontWeight:600 }}>
+            {selectable.map(g => <option key={g} value={g}>Gameweek {g}{(state.locks||{})[g] ? " \u2014 locked" : ""}{g===(state.activeGW||1) ? " \u00b7 current" : ""}</option>)}
+          </select>
+          <span className="helper" style={{ margin:0 }}>The admin has opened {selectable.length} weeks \u2014 you can submit ahead.</span>
+        </div>
+      )}
+
       <div className="nav" style={{ marginBottom: 28 }}>
         <button className={tab==="scores"?"active":""} onClick={()=>setTab("scores")}>Score Predictions</button>
         <button className={tab==="team"?"active":""} onClick={()=>setTab("team")}>Team of the Week</button>
@@ -1115,8 +1204,8 @@ function PredictView({ state, myPred, users, fpl, updateMyPred, showToast }) {
       </div>
 
       {tab==="scores" && <ScoresTab state={state} gw={gw} locked={locked} fixtures={fixtures} boot={boot} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
-      {tab==="team" && <TeamTab state={state} gw={gw} locked={locked} fixtures={fixtures} boot={boot} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
-      {tab==="f4" && <F4Tab state={state} gw={gw} locked={locked} live={live} boot={boot} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
+      {tab==="team" && <TeamTab state={state} gw={gw} locked={locked} fixtures={fixtures} boot={boot} fpl={fpl} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
+      {tab==="f4" && <F4Tab state={state} gw={gw} locked={locked} live={live} boot={boot} fixtures={fixtures} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
       {tab==="survivor" && <SurvivorTab state={state} gw={gw} locked={locked} fixtures={fixtures} myPred={myPred} fpl={fpl} updateMyPred={updateMyPred} showToast={showToast} />}
       {tab==="bonus" && <BonusTab state={state} gw={gw} locked={locked} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
     </div>
@@ -1179,10 +1268,12 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
   );
 }
 
-function TeamTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, showToast }) {
+function TeamTab({ state, gw, locked, fixtures, boot, fpl, myPred, updateMyPred, showToast }) {
   const sc = state.scoring || DEFAULT_SCORING;
   const teams = teamsPlayingInGW(fixtures);
   const pick = (myPred.teamPick && myPred.teamPick[gw]) || null;
+  const nextFix = pick && pick.team ? teamFixturesInGW(fixtures, pick.team) : [];
+  const form = pick && pick.team ? teamRecentForm((fpl && fpl.fixturesByGW) || {}, pick.team, gw) : [];
   const fullName = (short) => { const t = boot && boot.teams && Object.values(boot.teams).find(x=>x.short===short); return t ? t.name : short; };
   // teams appearing in >1 fixture this GW => double gameweek team (need opponent tag)
   const dgwOpps = {};
@@ -1230,6 +1321,27 @@ function TeamTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, show
           );
         })}
       </div>
+      {pick && pick.team && (
+        <div className="card" style={{ marginTop:18 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
+            <TeamBadge short={pick.team} boot={boot} size={44} />
+            <div style={{ flex:1, minWidth:150 }}>
+              <div style={{ fontFamily:'Anton', fontSize:22 }}>{fullName(pick.team)}</div>
+              <div className="helper" style={{ margin:0 }}>Backed to win GW{gw}</div>
+            </div>
+            <div style={{ textAlign:'right' }}>
+              <div style={{ fontFamily:'JetBrains Mono', fontSize:10, letterSpacing:'0.12em', color:'var(--ink-mute)' }}>NEXT FIXTURE</div>
+              <div style={{ fontWeight:700, fontSize:15 }}>{nextFix.length ? nextFix.map(x=>x.opp+" ("+(x.ha==='H'?'Home':'Away')+")").join(", ") : "\u2014"}</div>
+            </div>
+            <div style={{ textAlign:'right', minWidth:110 }}>
+              <div style={{ fontFamily:'JetBrains Mono', fontSize:10, letterSpacing:'0.12em', color:'var(--ink-mute)' }}>RECENT FORM</div>
+              <div style={{ display:'flex', gap:4, justifyContent:'flex-end', marginTop:4 }}>
+                {form.length ? form.map((r,i)=>(<span key={i} title={"GW"+r.gw+" "+(r.ha==='H'?'vs':'@')+" "+r.opp} style={{ display:'inline-flex', width:20, height:20, alignItems:'center', justifyContent:'center', borderRadius:4, fontFamily:'JetBrains Mono', fontSize:11, fontWeight:700, color:'#0b0b12', background: r.r==='W'?'var(--accent-2)':r.r==='D'?'#c9a227':'var(--red)' }}>{r.r}</span>)) : <span style={{ color:'var(--ink-mute)' }}>N/A</span>}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {pick && dgwOpps[pick.team] && !locked && (
         <div className="card" style={{ marginTop:18 }}>
           <div className="card-title" style={{ fontSize:16 }}>Double gameweek — which {pick.team} fixture?</div>
@@ -1246,7 +1358,7 @@ function TeamTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, show
   );
 }
 
-function F4Tab({ state, gw, locked, live, boot, myPred, updateMyPred, showToast }) {
+function F4Tab({ state, gw, locked, live, boot, fixtures, myPred, updateMyPred, showToast }) {
   const sc = state.scoring || DEFAULT_SCORING;
   if (!boot || !boot.players) return <div className="empty"><div className="empty-title">PLAYERS LOADING</div><p>FPL player data isn't available yet.</p></div>;
   const players = boot.players;
@@ -1255,27 +1367,24 @@ function F4Tab({ state, gw, locked, live, boot, myPred, updateMyPred, showToast 
   const isAvailable = useMemo(() => makeF4Availability(myPred.f4), [myPred.f4]);
   const f4 = (myPred.f4 && myPred.f4[gw]) || {};
   const slotKey = { GK:"gk", DEF:"def", MID:"mid", FWD:"fwd" };
-
   const setPlayer = (pos, playerId) => {
     if (locked) { showToast("Gameweek locked"); return; }
     updateMyPred(p => ({ ...p, f4: { ...p.f4, [gw]: { ...(p.f4 && p.f4[gw]), [slotKey[pos]]: playerId || undefined } } }));
   };
-
   const teamList = Object.values(teams || {}).sort((a,b)=>a.name.localeCompare(b.name));
   const sum = f4Points(f4, live, sc);
-
   return (
     <div>
       {locked && <div className="lock-banner">🔒 Fantastic Four for GW{gw} is locked.</div>}
-      <p className="helper" style={{ marginBottom:16 }}>Pick one player per position. You score the sum of their real FPL points this gameweek (bonuses included). DEF/MID: once all season. GK/FWD: twice, once per half. Used players disappear from the menus.</p>
+      <p className="helper" style={{ marginBottom:16 }}>Pick one player per position — you score the sum of their real FPL points this gameweek (bonuses included). DEF/MID: once all season. GK/FWD: twice, once per half. Tap a slot to browse players with live FPL stats.</p>
       {POSITIONS.map(pos => {
         const currentId = f4[slotKey[pos]];
         const current = currentId ? players[currentId] : null;
         return (
-          <F4Slot key={pos} pos={pos} gw={gw} locked={locked}
-            current={current} teams={teamList} byTeamPos={byTeamPos}
-            isAvailable={isAvailable} live={live}
-            onPick={(pid)=>setPlayer(pos, pid)} />
+          <F4Slot key={pos} pos={pos} gw={gw} locked={locked} current={current}
+            players={players} teams={teamList} teamsById={teams} byTeamPos={byTeamPos}
+            isAvailable={isAvailable} live={live} fixtures={fixtures} boot={boot}
+            onPick={(pid)=>setPlayer(pos, pid)} showToast={showToast} />
         );
       })}
       <div className="card" style={{ marginTop:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -1286,31 +1395,143 @@ function F4Tab({ state, gw, locked, live, boot, myPred, updateMyPred, showToast 
   );
 }
 
-function F4Slot({ pos, gw, locked, current, teams, byTeamPos, isAvailable, live, onPick }) {
-  const [teamId, setTeamId] = useState(current ? current.teamId : "");
-  useEffect(() => { setTeamId(current ? current.teamId : ""); }, [current && current.id]);
-
-  const poolAll = teamId && byTeamPos[teamId] ? byTeamPos[teamId][pos] : [];
-  // available players in this team+pos (plus the currently-selected one so it stays visible)
-  const pool = poolAll.filter(pl => isAvailable(pl.id, pos, gw) || (current && current.id === pl.id));
+function F4Slot({ pos, gw, locked, current, players, teams, teamsById, byTeamPos, isAvailable, live, fixtures, boot, onPick, showToast }) {
+  const [open, setOpen] = useState(false);
   const pts = current ? (Number(live[current.id]) || 0) : null;
-
+  const showPts = current && (locked || (live && live[current.id] != null));
+  const st = statusInfo(current);
+  const fixLabels = current ? playerFixtureLabels(fixtures, teamsById, current.teamId) : [];
   return (
-    <div className="f4-slot">
-      <div className="f4-slot-title">{POS_LABEL[pos]}{current ? <span style={{ float:'right', fontFamily:'Anton', color:'var(--accent-2)' }}>{locked || (live && live[current.id]!=null) ? `${pts} pts` : ""}</span> : null}</div>
-      <div className="f4-row">
-        <select value={teamId} disabled={locked} onChange={e=>{ setTeamId(e.target.value ? parseInt(e.target.value,10) : ""); }}>
-          <option value="">— team —</option>
-          {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-        <select value={current ? current.id : ""} disabled={locked || !teamId} onChange={e=>onPick(e.target.value ? parseInt(e.target.value,10) : "")}>
-          <option value="">{teamId ? "— player —" : "pick team first"}</option>
-          {pool.map(pl => (
-            <option key={pl.id} value={pl.id}>{pl.name}{pl.status && pl.status!=='a' ? " ⚠" : ""}</option>
-          ))}
-        </select>
+    <div style={{ marginBottom:12 }}>
+      <div className="f4card">
+        <TeamBadge short={current ? current.teamShort : ""} boot={boot} size={40} />
+        <div style={{ flex:1, minWidth:0 }}>
+          <div className="slotpos">{POS_LABEL[pos]}</div>
+          {current ? (
+            <React.Fragment>
+              <div className="fname">{current.name}</div>
+              <div className="pmeta">{current.teamShort} · {fixLabels.length ? fixLabels.join(", ") : "no fixture"} · <span style={{ color: st.color }}><span className="statdot" style={{ background: st.color }}></span>{st.label}</span></div>
+              <div className="pmeta">Form <b>{fmtNum(current.form)}</b> · PPG <b>{fmtNum(current.ppg)}</b> · Pts <b>{fmtNum(current.pts)}</b> · TSB <b>{fmtTSB(current.tsb)}</b></div>
+              {!st.ok && current.news ? <div style={{ marginTop:6, fontSize:12, color:'var(--red)' }}>{current.news}</div> : null}
+            </React.Fragment>
+          ) : (
+            <div className="fname" style={{ color:'var(--ink-mute)' }}>Empty</div>
+          )}
+        </div>
+        <div style={{ textAlign:'right' }}>
+          {showPts ? <div style={{ fontFamily:'Anton', fontSize:26, color:'var(--accent-2)' }}>{pts}</div> : null}
+          <button className="btn btn-sm btn-primary" style={{ marginTop:8 }} disabled={locked} onClick={()=>setOpen(true)}>{current ? "Swap" : "Choose"}</button>
+        </div>
       </div>
-      {current && <div className="helper" style={{ marginTop:8 }}>Selected: <strong style={{ color:'var(--ink)' }}>{current.name}</strong> ({current.teamShort}){current.status && current.status!=='a' ? " · ⚠ flagged (injury/doubt) in FPL" : ""}</div>}
+      {open && !locked && (
+        <F4PickerModal pos={pos} gw={gw} current={current} players={players} teams={teams} teamsById={teamsById} isAvailable={isAvailable} fixtures={fixtures} boot={boot}
+          onClose={()=>setOpen(false)} onPick={(pid)=>{ onPick(pid); setOpen(false); }} />
+      )}
+    </div>
+  );
+}
+
+function F4CompareCol({ pl, fixOf, boot }) {
+  const st = statusInfo(pl);
+  const rows = [["Status", <span style={{ color:st.color }}>{st.label}</span>], ["Fixture", fixOf(pl)], ["Points", fmtNum(pl.pts)], ["Form", fmtNum(pl.form)], ["PPG", fmtNum(pl.ppg)], ["TSB", fmtTSB(pl.tsb)]];
+  return (
+    <div>
+      <div style={{ textAlign:'center' }}>
+        <TeamBadge short={pl.teamShort} boot={boot} size={40} />
+        <div style={{ fontFamily:'Anton', fontSize:18, marginTop:6 }}>{pl.name}</div>
+        <div style={{ color:'var(--ink-mute)', fontSize:12 }}>{pl.teamShort}</div>
+      </div>
+      <div style={{ marginTop:10 }}>
+        {rows.map(([k,v],idx) => <div key={idx} className="stat-line"><span style={{ color:'var(--ink-mute)' }}>{k}</span><strong>{v}</strong></div>)}
+      </div>
+      {!st.ok && pl.news ? <div style={{ marginTop:8, fontSize:11, color:'var(--red)' }}>{pl.news}</div> : null}
+    </div>
+  );
+}
+
+function F4PickerModal({ pos, gw, current, players, teams, teamsById, isAvailable, fixtures, boot, onClose, onPick }) {
+  const [q, setQ] = useState("");
+  const [club, setClub] = useState("");
+  const [sort, setSort] = useState("pts");
+  const [compareId, setCompareId] = useState(null);
+  const num = v => { const n = parseFloat(v); return isNaN(n) ? -1 : n; };
+  const candidates = useMemo(() => {
+    let list = Object.values(players).filter(pl => pl.pos === pos && (isAvailable(pl.id, pos, gw) || (current && current.id === pl.id)));
+    if (club) list = list.filter(pl => String(pl.teamId) === String(club));
+    if (q.trim()) { const t = q.trim().toLowerCase(); list = list.filter(pl => (pl.name||"").toLowerCase().includes(t) || (pl.full||"").toLowerCase().includes(t)); }
+    return list.slice().sort((a,b) => {
+      if (sort === "name") return (a.name||"").localeCompare(b.name||"");
+      if (sort === "form") return num(b.form) - num(a.form);
+      if (sort === "ppg") return num(b.ppg) - num(a.ppg);
+      if (sort === "tsb") return num(b.tsb) - num(a.tsb);
+      return num(b.pts) - num(a.pts);
+    });
+  }, [players, pos, gw, club, q, sort, isAvailable, current]);
+  const compare = compareId ? players[compareId] : null;
+  const fixOf = (pl) => { const l = playerFixtureLabels(fixtures, teamsById, pl.teamId); return l.length ? l.join(", ") : "—"; };
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e=>e.stopPropagation()}>
+        <div className="modal-head">
+          <h3>{compare ? "Compare Players" : ("Select " + pos)}</h3>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          {compare ? (
+            <div className="cmp">
+              <div className="col"><h4>CURRENT PICK</h4>{current ? <F4CompareCol pl={current} fixOf={fixOf} boot={boot} /> : <div style={{ textAlign:'center', color:'var(--ink-mute)', paddingTop:20 }}>Empty slot</div>}</div>
+              <div className="vs">VS</div>
+              <div className="col"><h4>CANDIDATE</h4><F4CompareCol pl={compare} fixOf={fixOf} boot={boot} /></div>
+            </div>
+          ) : (
+            <React.Fragment>
+              <div className="pk-controls">
+                <input className="pk-input" placeholder="Search player name…" value={q} onChange={e=>setQ(e.target.value)} />
+                <div className="row2">
+                  <select className="pk-select" value={club} onChange={e=>setClub(e.target.value)}>
+                    <option value="">All clubs</option>
+                    {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                  <select className="pk-select" value={sort} onChange={e=>setSort(e.target.value)}>
+                    <option value="pts">Sort by Points</option>
+                    <option value="form">Sort by Form</option>
+                    <option value="ppg">Sort by PPG</option>
+                    <option value="tsb">Sort by TSB</option>
+                    <option value="name">Sort by Name</option>
+                  </select>
+                </div>
+              </div>
+              {candidates.length === 0 ? <div className="empty-mini">No available players match — they may already be used this season/half.</div> : candidates.slice(0, 120).map(pl => {
+                const st = statusInfo(pl);
+                return (
+                  <div key={pl.id} className="pcard">
+                    <TeamBadge short={pl.teamShort} boot={boot} size={30} />
+                    <div className="pinfo">
+                      <div className="pname">{pl.name} <span style={{ fontWeight:400, color:'var(--ink-mute)', fontSize:12 }}>({pl.teamShort})</span>{!st.ok && <span style={{ color:st.color, fontSize:11 }}> · {st.label}</span>}</div>
+                      <div className="pmeta">Fix <b>{fixOf(pl)}</b> · Form <b>{fmtNum(pl.form)}</b> · PPG <b>{fmtNum(pl.ppg)}</b> · Pts <b>{fmtNum(pl.pts)}</b> · TSB <b>{fmtTSB(pl.tsb)}</b></div>
+                    </div>
+                    <div className="pacts">
+                      <button className="btn btn-ghost btn-sm" onClick={()=>setCompareId(pl.id)}>Compare</button>
+                      <button className="btn btn-primary btn-sm" onClick={()=>onPick(pl.id)}>Pick</button>
+                    </div>
+                  </div>
+                );
+              })}
+              {candidates.length > 120 ? <p className="helper" style={{ marginTop:8 }}>Showing first 120 — use search or the club filter to narrow down.</p> : null}
+            </React.Fragment>
+          )}
+        </div>
+        <div className="modal-foot">
+          {compare ? (
+            <React.Fragment>
+              <button className="btn btn-ghost btn-sm" onClick={()=>setCompareId(null)}>Back to list</button>
+              <button className="btn btn-primary btn-sm" onClick={()=>onPick(compare.id)}>Swap to {compare.name}</button>
+            </React.Fragment>
+          ) : (
+            <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1760,8 +1981,11 @@ function ExportOnlyDashboard({ users, standings, state, fpl }) {
 function AdminDashboard({ state, users, standings, fpl, updateState, showToast, onRefresh }) {
   const boot = fpl.boot;
   const activeGW = state.activeGW || 1;
-  const fixtures = (fpl.fixturesByGW && fpl.fixturesByGW[activeGW]) || [];
-  const selIds = (state.selectedFixtures && state.selectedFixtures[activeGW]) || [];
+  const openGWs = (state.openGWs && state.openGWs.length) ? state.openGWs.slice().sort((a,b)=>a-b) : [activeGW];
+  const fxSelectable = Array.from(new Set([...openGWs, activeGW])).sort((a,b)=>a-b);
+  const [fxGW, setFxGW] = useState(activeGW);
+  const fixtures = (fpl.fixturesByGW && fpl.fixturesByGW[fxGW]) || [];
+  const selIds = (state.selectedFixtures && state.selectedFixtures[fxGW]) || [];
   const [newQ, setNewQ] = useState({ text: "", options: "", points: 3 });
   const bonusList = (state.bonus && state.bonus[activeGW]) || [];
   const addBonus = () => {
@@ -1775,11 +1999,16 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
   const toggleSurvivor = () => updateState(st => ({ ...st, survivorEnabled: !st.survivorEnabled }));
 
   const setActiveGW = (v) => { const n = Math.max(1, Math.min(TOTAL_GW, v)); updateState(s => ({ ...s, activeGW: n })); };
+  const toggleOpenGW = (gw) => updateState(s => {
+    const cur = (s.openGWs && s.openGWs.length) ? s.openGWs.slice() : [s.activeGW||1];
+    const next = cur.includes(gw) ? cur.filter(x=>x!==gw) : [...cur, gw];
+    return { ...s, openGWs: next.length ? next.sort((a,b)=>a-b) : [s.activeGW||1] };
+  });
   const toggleLock = (gw) => updateState(s => ({ ...s, locks: { ...s.locks, [gw]: !s.locks[gw] } }));
   const toggleFixture = (fid) => updateState(s => {
-    const cur = (s.selectedFixtures && s.selectedFixtures[activeGW]) || [];
+    const cur = (s.selectedFixtures && s.selectedFixtures[fxGW]) || [];
     const next = cur.map(String).includes(String(fid)) ? cur.filter(x => String(x)!==String(fid)) : [...cur, fid];
-    return { ...s, selectedFixtures: { ...s.selectedFixtures, [activeGW]: next } };
+    return { ...s, selectedFixtures: { ...s.selectedFixtures, [fxGW]: next } };
   });
   const setScoring = (key, v) => updateState(s => ({ ...s, scoring: { ...(s.scoring||DEFAULT_SCORING), [key]: Number(v) } }));
 
@@ -1822,7 +2051,7 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
           <div className="card-title">Locks</div>
           <p className="helper" style={{ marginBottom:12 }}>Lock a gameweek right after its FPL deadline. Locking freezes picks and reveals them on the Picks tab.</p>
           <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
-            {Array.from({length: activeGW}, (_,i)=>i+1).map(gw => {
+            {Array.from({length: Math.max(activeGW, ...openGWs)}, (_,i)=>i+1).map(gw => {
               const on = !!(state.locks||{})[gw];
               return <button key={gw} className={"team-chip" + (on?" selected":"")} onClick={()=>toggleLock(gw)} style={{ minWidth:64 }}>
                 GW{gw}<span className="uses">{on?"🔒 locked":"open"}</span></button>;
@@ -1832,10 +2061,28 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
       </div>
 
       <div className="card" style={{ marginTop:18 }}>
-        <div className="card-title">Score-prediction fixtures · GW{activeGW}
+        <div className="card-title">Open weeks for predictions</div>
+        <p className="helper" style={{ marginBottom:12 }}>Tick every gameweek pundits can fill in now — open a few ahead so people can submit 2–3 weeks in advance. The current GW is always available. A player picks the week from a dropdown on the Predict tab.</p>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+          {Array.from({length: 8}, (_,i)=> activeGW + i).filter(g=>g<=TOTAL_GW).map(g => {
+            const on = openGWs.includes(g);
+            return <button key={g} className={"team-chip" + (on?" selected":"")} onClick={()=>toggleOpenGW(g)} style={{ minWidth:64 }}>
+              GW{g}<span className="uses">{on?"open":"closed"}{g===activeGW?" · now":""}</span></button>;
+          })}
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop:18 }}>
+        <div className="card-title">Score-prediction fixtures
           <span style={{ fontFamily:'JetBrains Mono', fontSize:12, color: selIds.length===state.scoresPerGW?'var(--accent-2)':'var(--ink-mute)' }}>{selIds.length} selected (target {state.scoresPerGW}{fixtures.length>state.scoresPerGW?", +extras for DGW":""})</span>
         </div>
-        {fixtures.length === 0 ? <div className="empty-mini">No FPL fixtures loaded for GW{activeGW}. Hit “Refresh FPL data”. (Fixtures only load once deployed on Vercel.)</div> : (
+        <div style={{ display:'flex', alignItems:'center', gap:10, margin:'2px 0 14px' }}>
+          <span style={{ fontFamily:'JetBrains Mono', fontSize:11, letterSpacing:'0.1em', color:'var(--ink-mute)' }}>EDITING</span>
+          <select value={fxGW} onChange={e=>setFxGW(parseInt(e.target.value,10))} style={{ background:'var(--bg-2)', border:'1px solid var(--line)', color:'var(--ink)', padding:'7px 10px', borderRadius:4, fontWeight:600 }}>
+            {fxSelectable.map(g => <option key={g} value={g}>Gameweek {g}{g===activeGW?" · current":""}</option>)}
+          </select>
+        </div>
+        {fixtures.length === 0 ? <div className="empty-mini">No FPL fixtures loaded for GW{fxGW}. Hit “Refresh FPL data”. (Fixtures only load once deployed on Vercel.)</div> : (
           <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
             {fixtures.map(f => {
               const on = selIds.map(String).includes(String(f.id));
@@ -1844,7 +2091,7 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
             })}
           </div>
         )}
-        <p className="helper" style={{ marginTop:10 }}>Pick the {state.scoresPerGW} fixtures that count for score predictions this GW. Add a couple more in double gameweeks.</p>
+        <p className="helper" style={{ marginTop:10 }}>Pick the {state.scoresPerGW} fixtures that count for score predictions in GW{fxGW}. Add a couple more in double gameweeks.</p>
       </div>
 
       <div className="card" style={{ marginTop:18 }}>
