@@ -177,7 +177,7 @@
   .lb-rank.gold { color: var(--yellow); }
   .lb-rank.silver { color: #cfd0d4; }
   .lb-rank.bronze { color: #d4824a; }
-  .lb-total { font-family: 'Anton', sans-serif; font-size: 26px; color: var(--accent); letter-spacing: 0.02em; text-align: right; }
+  .lb-table td.lb-total { font-family: 'Anton', sans-serif; font-size: 26px; color: var(--accent); letter-spacing: 0.02em; text-align: right; }
   .lb-breakdown { display: flex; gap: 10px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-mute); flex-wrap: wrap; }
   .lb-breakdown span { background: var(--bg-2); padding: 3px 8px; border: 1px solid var(--line); border-radius: 3px; }
   .lb-breakdown span strong { color: var(--ink); font-weight: 700; margin-left: 4px; }
@@ -1067,8 +1067,8 @@ function playerFixtureLabels(fixtures, teamsById, teamId) {
   if (!short) return [];
   return teamFixturesInGW(fixtures, short).map(x => x.opp + " (" + x.ha + ")");
 }
-function fmtTSB(v) { return (v == null || v === "") ? "\u2014" : (String(v) + "%"); }
-function fmtNum(v) { return (v == null || v === "") ? "\u2014" : String(v); }
+function fmtTSB(v) { return (v == null || v === "") ? "—" : (String(v) + "%"); }
+function fmtNum(v) { return (v == null || v === "") ? "—" : String(v); }
 function statusInfo(pl) {
   if (!pl || pl.status === "a" || !pl.status) return { ok: true, label: "Available", color: "var(--accent-2)" };
   const map = { i: "Injured", s: "Suspended", d: "Doubtful", u: "Unavailable" };
@@ -1117,19 +1117,19 @@ function FixturesView({ state, fpl }) {
   return (
     <div>
       <div className="page-head">
-        <div className="eyebrow">FIXTURES \u00b7 GAMEWEEK {selGW}</div>
+        <div className="eyebrow">FIXTURES · GAMEWEEK {selGW}</div>
         <h1 className="page-title">Match <span className="it">week.</span></h1>
-        <p className="page-sub">Browse any gameweek \u2014 use it to plan your team of the week and survivor pick.</p>
+        <p className="page-sub">Browse any gameweek — use it to plan your team of the week and survivor pick.</p>
       </div>
       <div className="card" style={{ marginBottom:20, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
         <span style={{ fontFamily:'JetBrains Mono', fontSize:12, letterSpacing:'0.1em', color:'var(--ink-mute)' }}>GAMEWEEK</span>
-        <button className="btn btn-sm" onClick={()=>setSelGW(g => Math.max(1, g-1))}>\u2212</button>
+        <button className="btn btn-sm" onClick={()=>setSelGW(g => Math.max(1, g-1))}>−</button>
         <select value={selGW} onChange={e=>setSelGW(parseInt(e.target.value,10))} style={{ background:'var(--bg-2)', border:'1px solid var(--line)', color:'var(--ink)', padding:'8px 12px', borderRadius:4, fontWeight:600 }}>
-          {Array.from({length: TOTAL_GW}, (_,i)=>i+1).map(g => <option key={g} value={g}>Gameweek {g}{g===(state.activeGW||1) ? " \u00b7 current" : ""}</option>)}
+          {Array.from({length: TOTAL_GW}, (_,i)=>i+1).map(g => <option key={g} value={g}>Gameweek {g}{g===(state.activeGW||1) ? " · current" : ""}</option>)}
         </select>
         <button className="btn btn-sm" onClick={()=>setSelGW(g => Math.min(TOTAL_GW, g+1))}>+</button>
       </div>
-      {!boot && <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>\u26a0\ufe0f Couldn't load FPL fixtures. They load once deployed on Vercel; if you're live, hit Refresh on the Home tab.</div>}
+      {!boot && <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>⚠️ Couldn't load FPL fixtures. They load once deployed on Vercel; if you're live, hit Refresh on the Home tab.</div>}
       {fixtures.length === 0 ? (
         <div className="empty"><div className="empty-title">NO FIXTURES YET</div><p>FPL fixtures for GW{selGW} aren't available yet. They usually appear once the schedule is confirmed.</p></div>
       ) : Object.entries(groups).map(([day, fx]) => (
@@ -1141,7 +1141,7 @@ function FixturesView({ state, fpl }) {
               return (
                 <div key={f.id} className="fxrow">
                   <div className="side home"><span className="tn">{f.teamH}</span><TeamBadge short={f.teamH} code={codeOf(f.teamHId, f.teamH)} boot={boot} size={30} /></div>
-                  <div className="mid">{f.finished ? <span className="sc">{f.hScore}\u2013{f.aScore}</span> : <span>{time}</span>}<div style={{ marginTop:3, fontSize:10, letterSpacing:'0.1em' }}>{f.finished ? "FT" : ""}</div></div>
+                  <div className="mid">{f.finished ? <span className="sc">{f.hScore}–{f.aScore}</span> : <span>{time}</span>}<div style={{ marginTop:3, fontSize:10, letterSpacing:'0.1em' }}>{f.finished ? "FT" : ""}</div></div>
                   <div className="side away"><TeamBadge short={f.teamA} code={codeOf(f.teamAId, f.teamA)} boot={boot} size={30} /><span className="tn">{f.teamA}</span></div>
                 </div>
               );
@@ -1189,9 +1189,9 @@ function PredictView({ state, myPred, users, fpl, updateMyPred, showToast }) {
         <div className="card" style={{ marginBottom:20, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
           <span style={{ fontFamily:'JetBrains Mono', fontSize:12, letterSpacing:'0.1em', color:'var(--ink-mute)' }}>PREDICTING FOR</span>
           <select value={gw} onChange={e=>setGw(parseInt(e.target.value,10))} style={{ background:'var(--bg-2)', border:'1px solid var(--line)', color:'var(--ink)', padding:'8px 12px', borderRadius:4, fontWeight:600 }}>
-            {selectable.map(g => <option key={g} value={g}>Gameweek {g}{(state.locks||{})[g] ? " \u2014 locked" : ""}{g===(state.activeGW||1) ? " \u00b7 current" : ""}</option>)}
+            {selectable.map(g => <option key={g} value={g}>Gameweek {g}{(state.locks||{})[g] ? " — locked" : ""}{g===(state.activeGW||1) ? " · current" : ""}</option>)}
           </select>
-          <span className="helper" style={{ margin:0 }}>The admin has opened {selectable.length} weeks \u2014 you can submit ahead.</span>
+          <span className="helper" style={{ margin:0 }}>The admin has opened {selectable.length} weeks — you can submit ahead.</span>
         </div>
       )}
 
@@ -1331,7 +1331,7 @@ function TeamTab({ state, gw, locked, fixtures, boot, fpl, myPred, updateMyPred,
             </div>
             <div style={{ textAlign:'right' }}>
               <div style={{ fontFamily:'JetBrains Mono', fontSize:10, letterSpacing:'0.12em', color:'var(--ink-mute)' }}>NEXT FIXTURE</div>
-              <div style={{ fontWeight:700, fontSize:15 }}>{nextFix.length ? nextFix.map(x=>x.opp+" ("+(x.ha==='H'?'Home':'Away')+")").join(", ") : "\u2014"}</div>
+              <div style={{ fontWeight:700, fontSize:15 }}>{nextFix.length ? nextFix.map(x=>x.opp+" ("+(x.ha==='H'?'Home':'Away')+")").join(", ") : "—"}</div>
             </div>
             <div style={{ textAlign:'right', minWidth:110 }}>
               <div style={{ fontFamily:'JetBrains Mono', fontSize:10, letterSpacing:'0.12em', color:'var(--ink-mute)' }}>RECENT FORM</div>
