@@ -38,7 +38,14 @@ export default async function handler(req, res) {
           teamId: e.team,
           teamShort: teams[e.team] ? teams[e.team].short : '',
           pos: POS[e.element_type] || '',
-          status: e.status, // 'a' available, 'i' injured, 's' suspended, 'u' unavailable
+          status: e.status, // 'a' available, 'i' injured, 's' suspended, 'd' doubtful, 'u' unavailable
+          form: e.form,                       // avg points last ~30 days
+          ppg: e.points_per_game,             // points per game
+          pts: e.total_points,                // season total points
+          tsb: e.selected_by_percent,         // teams-selected-by %
+          news: e.news || '',                 // injury / availability note
+          chance: e.chance_of_playing_next_round,
+          cost: (typeof e.now_cost === 'number') ? e.now_cost / 10 : null,
         };
       });
       const events = (data.events || []).map(ev => ({
