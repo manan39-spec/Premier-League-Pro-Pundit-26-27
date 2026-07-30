@@ -602,6 +602,7 @@ function App() {
   const [adminRole, setAdminRole] = useState(null);
   const [remoteAvailable, setRemoteAvailable] = useState(false);
   const [fplBusy, setFplBusy] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
   const stateRef = useRef(null);
   useEffect(() => { stateRef.current = state; }, [state]);
 
@@ -730,6 +731,55 @@ function App() {
     if (!ok) { showToast("⚠️ NOT saved after retries — re-check and try again."); console.error("updateState failed"); }
   }, [showToast]);
 
+  // ---- account + admin user management (write/delete pp_pred:<name> records) ----
+  const changeMyPassword = useCallback(async (oldPw, newPw) => {
+    if (!user) return { ok:false, msg:"Not signed in" };
+    const rec = await getShared("pp_pred:" + user);
+    if (!rec) return { ok:false, msg:"Account not found — refresh and try again" };
+    if (rec.passwordHash) {
+      const h = await hashPassword(oldPw, rec.salt);
+      if (h !== rec.passwordHash) return { ok:false, msg:"Current password is wrong" };
+    }
+    const salt = makeSalt();
+    const passwordHash = await hashPassword(newPw, salt);
+    await setShared("pp_pred:" + user, { ...rec, salt, passwordHash });
+    setUsers(prev => prev.map(x => x.name === user ? { ...x, salt, passwordHash } : x));
+    return { ok:true };
+  }, [user]);
+
+  const adminSetPassword = useCallback(async (name, newPw) => {
+    const rec = await getShared("pp_pred:" + name);
+    if (!rec) return { ok:false, msg:"User not found" };
+    const salt = makeSalt();
+    const passwordHash = await hashPassword(newPw, salt);
+    await setShared("pp_pred:" + name, { ...rec, salt, passwordHash });
+    await loadUsers();
+    return { ok:true };
+  }, [loadUsers]);
+
+  const adminAddUser = useCallback(async (name, pw) => {
+    const clean = (name || "").trim();
+    if (!clean) return { ok:false, msg:"Enter a name" };
+    if (clean.length > 30) return { ok:false, msg:"Keep the name under 30 characters" };
+    const existing = await getShared("pp_pred:" + clean);
+    if (existing) return { ok:false, msg:"That name already exists" };
+    const rec = (pw && pw.trim())
+      ? await makeUserRecord(clean, pw.trim())
+      : { name: clean, joined: Date.now(), scores:{}, teamPick:{}, f4:{}, survivor:{}, bonusAnswers:{} };
+    await setShared("pp_pred:" + clean, rec);
+    await loadUsers();
+    return { ok:true };
+  }, [loadUsers]);
+
+  const adminDeleteUser = useCallback(async (name) => {
+    const key = "pp_pred:" + name;
+    if (apiReady) await remoteDeleteKeys([key]);
+    try { localStorage.removeItem(key); } catch {}
+    setUsers(prev => prev.filter(x => x.name !== name));
+    await loadUsers();
+    return { ok:true };
+  }, [loadUsers]);
+
   const standings = useMemo(() => state ? computeStandings(users, state, fpl) : [], [users, state, fpl]);
 
   if (loading) {
@@ -749,7 +799,7 @@ function App() {
             <div className="brand-mark">PRO <span className="accent">PUNDIT</span> LEAGUE</div>
             <div className="brand-sub">Season 6 · {state.season} · Premier League</div>
           </div>
-          <div className="user-pill"><span className="dot"></span><span>{user}</span><button onClick={logout}>switch</button></div>
+          <div className="user-pill"><span className="dot"></span><span>{user}</span><button onClick={()=>setShowAccount(true)}>password</button><button onClick={logout}>switch</button></div>
         </header>
         <nav className="nav">
           <button className={view==="home"?"active":""} onClick={()=>setView("home")}>Home</button>
@@ -767,13 +817,14 @@ function App() {
         {view==="picks" && <PicksView state={state} users={users} currentUser={user} fpl={fpl} />}
         {view==="leaderboard" && <LeaderboardView standings={standings} currentUser={user} state={state} users={users} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} />}
         {view==="rules" && <RulesView state={state} />}
-        {view==="admin" && <AdminView state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} isAdmin={isAdmin} setIsAdmin={setIsAdmin} adminRole={adminRole} setAdminRole={setAdminRole} showToast={showToast} onRefresh={()=>refreshAll(true)} />}
+        {view==="admin" && <AdminView state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} isAdmin={isAdmin} setIsAdmin={setIsAdmin} adminRole={adminRole} setAdminRole={setAdminRole} showToast={showToast} onRefresh={()=>refreshAll(true)} adminAddUser={adminAddUser} adminSetPassword={adminSetPassword} adminDeleteUser={adminDeleteUser} />}
 
         <footer className="app-footer">
           Pro Pundit League · <span className="accent">Season 6</span> · Put those pundit hats on
           <div>© {new Date().getFullYear()} Pro Pundit League</div>
         </footer>
       </div>
+      {showAccount && <AccountModal user={user} onClose={()=>setShowAccount(false)} changeMyPassword={changeMyPassword} showToast={showToast} />}
       {toast && <div className="toast">{toast}</div>}
     </>
   );
@@ -782,6 +833,39 @@ function App() {
 // ============================================================
 // LOGIN
 // ============================================================
+function AccountModal({ user, onClose, changeMyPassword, showToast }) {
+  const [cur, setCur] = useState(""); const [nw, setNw] = useState(""); const [nw2, setNw2] = useState("");
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState("");
+  const submit = async () => {
+    setErr("");
+    if (nw.length < 4) { setErr("New password must be at least 4 characters"); return; }
+    if (nw !== nw2) { setErr("New passwords don't match"); return; }
+    setBusy(true);
+    const r = await changeMyPassword(cur, nw);
+    setBusy(false);
+    if (r && r.ok) { showToast("Password updated"); onClose(); }
+    else setErr((r && r.msg) || "Couldn't update password");
+  };
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth:440 }} onClick={e=>e.stopPropagation()}>
+        <div className="modal-head"><h3>Your account</h3><button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button></div>
+        <div className="modal-body">
+          <p className="helper" style={{ marginTop:0, marginBottom:14 }}>Signed in as <strong style={{color:'var(--ink)'}}>{user}</strong>. Set a new password below.</p>
+          <div className="field"><label>Current password</label><input type="password" value={cur} onChange={e=>setCur(e.target.value)} placeholder="Leave blank if you never set one" /></div>
+          <div className="field"><label>New password</label><input type="password" value={nw} onChange={e=>setNw(e.target.value)} placeholder="Min 4 characters" /></div>
+          <div className="field"><label>Confirm new password</label><input type="password" value={nw2} onChange={e=>setNw2(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="Type it again" /></div>
+          {err && <div style={{ color:'var(--red)', fontSize:13 }}>{err}</div>}
+        </div>
+        <div className="modal-foot">
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary btn-sm" onClick={submit} disabled={busy}>{busy?"Saving…":"Update password"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LoginView({ onLogin, remoteAvailable }) {
   const [step, setStep] = useState("name");
   const [name, setName] = useState("");
@@ -1934,7 +2018,7 @@ function buildLeaderboardCSV(standings) {
 // ============================================================
 // ADMIN
 // ============================================================
-function AdminView({ state, users, standings, fpl, updateState, isAdmin, setIsAdmin, adminRole, setAdminRole, showToast, onRefresh }) {
+function AdminView({ state, users, standings, fpl, updateState, isAdmin, setIsAdmin, adminRole, setAdminRole, showToast, onRefresh, adminAddUser, adminSetPassword, adminDeleteUser }) {
   const [u, setU] = useState(""); const [p, setP] = useState(""); const [err, setErr] = useState("");
 
   const doLogin = () => {
@@ -1958,7 +2042,7 @@ function AdminView({ state, users, standings, fpl, updateState, isAdmin, setIsAd
     );
   }
   if (adminRole === "export") return <ExportOnlyDashboard users={users} standings={standings} state={state} fpl={fpl} />;
-  return <AdminDashboard state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} showToast={showToast} onRefresh={onRefresh} />;
+  return <AdminDashboard state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} showToast={showToast} onRefresh={onRefresh} adminAddUser={adminAddUser} adminSetPassword={adminSetPassword} adminDeleteUser={adminDeleteUser} />;
 }
 
 function ExportOnlyDashboard({ users, standings, state, fpl }) {
@@ -1978,7 +2062,7 @@ function ExportOnlyDashboard({ users, standings, state, fpl }) {
   );
 }
 
-function AdminDashboard({ state, users, standings, fpl, updateState, showToast, onRefresh }) {
+function AdminDashboard({ state, users, standings, fpl, updateState, showToast, onRefresh, adminAddUser, adminSetPassword, adminDeleteUser }) {
   const boot = fpl.boot;
   const activeGW = state.activeGW || 1;
   const openGWs = (state.openGWs && state.openGWs.length) ? state.openGWs.slice().sort((a,b)=>a-b) : [activeGW];
@@ -1987,6 +2071,27 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
   const fixtures = (fpl.fixturesByGW && fpl.fixturesByGW[fxGW]) || [];
   const selIds = (state.selectedFixtures && state.selectedFixtures[fxGW]) || [];
   const [newQ, setNewQ] = useState({ text: "", options: "", points: 3 });
+  const [pwInputs, setPwInputs] = useState({});
+  const [newUser, setNewUser] = useState({ name: "", pw: "" });
+  const namedUsers = (users || []).filter(u => u.name).sort((a,b)=>a.name.localeCompare(b.name));
+  const doSetPw = async (name) => {
+    const pw = (pwInputs[name]||"").trim();
+    if (pw.length < 4) { showToast("Password must be at least 4 characters"); return; }
+    const r = await adminSetPassword(name, pw);
+    if (r && r.ok) { showToast("Password reset for " + name); setPwInputs(pp => ({ ...pp, [name]: "" })); }
+    else showToast((r && r.msg) || "Couldn't reset password");
+  };
+  const doDeleteUser = async (name) => {
+    if (!window.confirm("Delete " + name + "? This removes their account and all their picks. No undo.")) return;
+    const r = await adminDeleteUser(name);
+    if (r && r.ok) showToast(name + " deleted");
+    else showToast((r && r.msg) || "Couldn't delete");
+  };
+  const doAddUser = async () => {
+    const r = await adminAddUser(newUser.name, newUser.pw);
+    if (r && r.ok) { showToast("Added " + newUser.name.trim()); setNewUser({ name: "", pw: "" }); }
+    else showToast((r && r.msg) || "Couldn't add pundit");
+  };
   const bonusList = (state.bonus && state.bonus[activeGW]) || [];
   const addBonus = () => {
     if (!newQ.text.trim()) { showToast("Enter a question first"); return; }
@@ -2070,6 +2175,27 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
               GW{g}<span className="uses">{on?"open":"closed"}{g===activeGW?" · now":""}</span></button>;
           })}
         </div>
+      </div>
+
+      <div className="card" style={{ marginTop:18 }}>
+        <div className="card-title">Pundits &amp; passwords <span style={{ fontFamily:'JetBrains Mono', fontSize:12, color:'var(--ink-mute)' }}>{namedUsers.length} pundits</span></div>
+        <p className="helper" style={{ marginBottom:14 }}>Add or remove pundits and reset anyone's password. Passwords are stored hashed — you set a new one, you can't read the existing one. Leave the new-pundit password blank to let them set their own on first sign-in.</p>
+        <div className="grid grid-3" style={{ alignItems:'flex-end' }}>
+          <div className="field" style={{ marginBottom:0 }}><label>New pundit name</label><input value={newUser.name} onChange={e=>setNewUser({ ...newUser, name:e.target.value })} placeholder="e.g. Karan" /></div>
+          <div className="field" style={{ marginBottom:0 }}><label>Initial password (optional)</label><input value={newUser.pw} onChange={e=>setNewUser({ ...newUser, pw:e.target.value })} placeholder="blank = they set it themselves" /></div>
+          <button className="btn btn-primary btn-sm" onClick={doAddUser}>+ Add pundit</button>
+        </div>
+        <div className="divider" style={{ margin:'18px 0' }}></div>
+        {namedUsers.length === 0 ? <div className="empty-mini">No pundits yet.</div> : namedUsers.map(u => (
+          <div key={u.name} className="fixture" style={{ marginBottom:10 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+              <div style={{ fontWeight:700, minWidth:110 }}>{u.name}{!u.passwordHash ? <span style={{ color:'var(--yellow)', fontSize:11, marginLeft:6 }}>· no password</span> : null}</div>
+              <input type="text" value={pwInputs[u.name]||""} onChange={e=>setPwInputs(pp=>({ ...pp, [u.name]:e.target.value }))} placeholder="set new password" style={{ flex:1, minWidth:150, background:'var(--bg-2)', border:'1px solid var(--line)', color:'var(--ink)', padding:'8px 10px', borderRadius:3 }} />
+              <button className="btn btn-sm" onClick={()=>doSetPw(u.name)}>Reset password</button>
+              <button className="btn btn-danger btn-sm" onClick={()=>doDeleteUser(u.name)}>Delete</button>
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="card" style={{ marginTop:18 }}>
