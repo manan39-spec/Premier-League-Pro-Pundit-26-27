@@ -498,6 +498,23 @@ function teamUsesTotal(teamPickMap, team) {
   return n;
 }
 
+// ---- Gameweek lock: manual (admin) OR automatic once the FPL deadline passes ----
+function eventDeadlineMs(fpl, gw) {
+  const events = (fpl && fpl.boot && fpl.boot.events) || [];
+  const ev = events.find(e => e.id === gw);
+  if (!ev || !ev.deadline) return null;
+  const t = new Date(ev.deadline).getTime();
+  return isNaN(t) ? null : t;
+}
+function deadlinePassed(fpl, gw, now) {
+  const ms = eventDeadlineMs(fpl, gw);
+  return ms != null && ((now != null ? now : Date.now()) >= ms);
+}
+// A gameweek is locked if the admin locked it manually, OR its FPL deadline has passed.
+function gwLocked(state, fpl, gw, now) {
+  return !!((state.locks || {})[gw]) || deadlinePassed(fpl, gw, now);
+}
+
 // ============================================================
 // SEASON STANDINGS — aggregate every scored gameweek.
 //   fpl = { fixturesByGW: {gw:[fx]}, liveByGW: {gw:{id:pts}} }
@@ -561,11 +578,11 @@ function survivorTeamsUsed(survivorMap, exceptGW) {
   return used;
 }
 // Walks locked gameweeks in order. A draw/loss or a missed pick on a locked GW = out.
-function computeSurvivor(pred, state, fpl) {
+function computeSurvivor(pred, state, fpl, now) {
   const maxGW = state.activeGW || 1;
   let status = "alive", outGW = null;
   for (let gw = 1; gw <= maxGW; gw++) {
-    if (!(state.locks || {})[gw]) break;               // only resolved (locked) GWs count
+    if (!gwLocked(state, fpl, gw, now)) break;         // only locked GWs count (manual OR deadline passed)
     const pk = pred.survivor && pred.survivor[gw];
     if (!pk || !pk.team) { status = "out"; outGW = gw; break; }
     const fixtures = (fpl.fixturesByGW && fpl.fixturesByGW[gw]) || [];
@@ -577,9 +594,9 @@ function computeSurvivor(pred, state, fpl) {
   }
   return { name: pred.name, status, outGW };
 }
-function computeSurvivorStandings(users, state, fpl) {
+function computeSurvivorStandings(users, state, fpl, now) {
   return (users || []).filter(u => u.name)
-    .map(u => computeSurvivor(u, state, fpl))
+    .map(u => computeSurvivor(u, state, fpl, now))
     .sort((a, b) => {
       if (a.status !== b.status) return a.status === "alive" ? -1 : 1;
       if (a.status === "out" && b.status === "out") return (b.outGW || 0) - (a.outGW || 0);
@@ -978,7 +995,7 @@ function HomeView({ state, user, myPred, standings, fpl, fplBusy, onRefresh, set
   const myRank = standings.findIndex(s => s.name === user) + 1;
   const leader = standings[0];
   const activeGW = state.activeGW || 1;
-  const locked = !!(state.locks || {})[activeGW];
+  const locked = gwLocked(state, fpl, activeGW);
 
   // Next FPL deadline from bootstrap events
   const events = (fpl.boot && fpl.boot.events) || [];
@@ -1253,7 +1270,7 @@ function PredictView({ state, myPred, users, fpl, updateMyPred, showToast }) {
   const selectable = Array.from(new Set([...openGWs, state.activeGW || 1])).sort((a, b) => a - b);
   const [gw, setGw] = useState(state.activeGW || 1);
   useEffect(() => { if (!selectable.includes(gw)) setGw(state.activeGW || 1); }, [selectable.join(","), state.activeGW]);
-  const locked = !!(state.locks || {})[gw];
+  const locked = gwLocked(state, fpl, gw);
   const fixtures = (fpl.fixturesByGW && fpl.fixturesByGW[gw]) || [];
   const live = (fpl.liveByGW && fpl.liveByGW[gw]) || {};
   const boot = fpl.boot;
@@ -1273,7 +1290,7 @@ function PredictView({ state, myPred, users, fpl, updateMyPred, showToast }) {
         <div className="card" style={{ marginBottom:20, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
           <span style={{ fontFamily:'JetBrains Mono', fontSize:12, letterSpacing:'0.1em', color:'var(--ink-mute)' }}>PREDICTING FOR</span>
           <select value={gw} onChange={e=>setGw(parseInt(e.target.value,10))} style={{ background:'var(--bg-2)', border:'1px solid var(--line)', color:'var(--ink)', padding:'8px 12px', borderRadius:4, fontWeight:600 }}>
-            {selectable.map(g => <option key={g} value={g}>Gameweek {g}{(state.locks||{})[g] ? " — locked" : ""}{g===(state.activeGW||1) ? " · current" : ""}</option>)}
+            {selectable.map(g => <option key={g} value={g}>Gameweek {g}{gwLocked(state, fpl, g) ? " — locked" : ""}{g===(state.activeGW||1) ? " · current" : ""}</option>)}
           </select>
           <span className="helper" style={{ margin:0 }}>The admin has opened {selectable.length} weeks — you can submit ahead.</span>
         </div>
@@ -1717,7 +1734,11 @@ function BonusTab({ state, gw, locked, myPred, updateMyPred, showToast }) {
 // PICKS — see everyone's picks for LOCKED gameweeks
 // ============================================================
 function PicksView({ state, users, currentUser, fpl }) {
-  const lockedGWs = Object.keys(state.locks || {}).filter(g => state.locks[g]).map(g => parseInt(g,10)).sort((a,b)=>b-a);
+  const manualLocked = Object.keys(state.locks || {}).filter(g => state.locks[g]).map(g => parseInt(g,10));
+  const _plNow = Date.now();
+  const _plEvents = (fpl.boot && fpl.boot.events) || [];
+  const autoLocked = _plEvents.filter(e => deadlinePassed(fpl, e.id, _plNow)).map(e => e.id);
+  const lockedGWs = Array.from(new Set([...manualLocked, ...autoLocked])).sort((a,b)=>b-a);
   const [gw, setGw] = useState(lockedGWs[0] || null);
   useEffect(() => { if (gw == null && lockedGWs.length) setGw(lockedGWs[0]); }, [lockedGWs.length]);
 
@@ -2064,6 +2085,7 @@ function ExportOnlyDashboard({ users, standings, state, fpl }) {
 
 function AdminDashboard({ state, users, standings, fpl, updateState, showToast, onRefresh, adminAddUser, adminSetPassword, adminDeleteUser }) {
   const boot = fpl.boot;
+  const now = Date.now();
   const activeGW = state.activeGW || 1;
   const openGWs = (state.openGWs && state.openGWs.length) ? state.openGWs.slice().sort((a,b)=>a-b) : [activeGW];
   const fxSelectable = Array.from(new Set([...openGWs, activeGW])).sort((a,b)=>a-b);
@@ -2154,14 +2176,19 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
 
         <div className="card">
           <div className="card-title">Locks</div>
-          <p className="helper" style={{ marginBottom:12 }}>Lock a gameweek right after its FPL deadline. Locking freezes picks and reveals them on the Picks tab.</p>
+          <p className="helper" style={{ marginBottom:12 }}>Gameweeks lock automatically the moment the FPL deadline passes — picks freeze and reveal on the Picks tab. You can also lock any week early by tapping it.</p>
           <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
             {Array.from({length: Math.max(activeGW, ...openGWs)}, (_,i)=>i+1).map(gw => {
-              const on = !!(state.locks||{})[gw];
-              return <button key={gw} className={"team-chip" + (on?" selected":"")} onClick={()=>toggleLock(gw)} style={{ minWidth:64 }}>
-                GW{gw}<span className="uses">{on?"🔒 locked":"open"}</span></button>;
+              const manual = !!(state.locks||{})[gw];
+              const auto = deadlinePassed(fpl, gw, now);
+              const dlMs = eventDeadlineMs(fpl, gw);
+              const eff = manual || auto;
+              const sub = auto ? "🔒 auto · deadline" : manual ? "🔒 locked" : (dlMs ? new Date(dlMs).toLocaleDateString(undefined,{month:'short',day:'numeric'}) : "open");
+              return <button key={gw} className={"team-chip" + (eff?" selected":"")} onClick={()=> auto ? showToast("GW"+gw+" is auto-locked — its FPL deadline has passed") : toggleLock(gw)} style={{ minWidth:64, cursor: auto?'default':'pointer', opacity: (auto && !manual)?0.85:1 }}>
+                GW{gw}<span className="uses">{sub}</span></button>;
             })}
           </div>
+          <p className="helper" style={{ marginTop:10 }}>“auto · deadline” = its FPL deadline has passed (locked automatically). Tap an open week to lock it early; tap a manual lock to unlock — only works before its deadline.</p>
         </div>
       </div>
 
