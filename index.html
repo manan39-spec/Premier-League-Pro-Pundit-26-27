@@ -43,6 +43,7 @@
   .theme-toggle:hover { border-color:var(--accent); }
   .save-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; position:sticky; bottom:0; margin-top:16px; padding:14px 16px; background:var(--card); border:1px solid var(--line); border-radius:8px; box-shadow:0 -6px 20px rgba(0,0,0,0.18); z-index:5; }
   .save-status { font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; }
+  .fx-save { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
   .quick-nav { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
   .qn-btn { display:flex; align-items:center; gap:10px; padding:14px 16px; border:1px solid var(--line); border-radius:8px; background:var(--bg-2); color:var(--ink); font-weight:600; font-size:14px; text-align:left; transition:border 0.15s, transform 0.05s; }
   .qn-btn:hover { border-color:var(--accent); }
@@ -1362,8 +1363,6 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
   const stored = (myPred.scores && myPred.scores[gw]) || {};
   const draft = scoreDraft || {};
   const fullName = (short, id) => (boot && boot.teams && boot.teams[id]) ? boot.teams[id].name : short;
-  const dirty = selected.some(f => (draft[f.id] || "") !== (stored[f.id] || ""));
-  const hasSaved = selected.some(f => (stored[f.id] || "") !== "");
 
   const setHalf = (fid, which, val) => {
     if (locked) { showToast("Gameweek locked"); return; }
@@ -1372,59 +1371,61 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
     const next = which === 0 ? `${v}-${cur[1]||""}` : `${cur[0]||""}-${v}`;
     setScoreDraft(d => ({ ...(d||{}), [fid]: next }));
   };
-  const save = () => {
+  // Save (or update) a single match's prediction.
+  const saveOne = (fid) => {
     if (locked) { showToast("Gameweek locked"); return; }
-    updateMyPred(p => ({ ...p, scores: { ...p.scores, [gw]: { ...draft } } }));
-    showToast("Predictions saved");
+    const already = !!(stored[fid]);
+    updateMyPred(p => ({ ...p, scores: { ...p.scores, [gw]: { ...(p.scores && p.scores[gw]), [fid]: (draft[fid] || "") } } }));
+    showToast(already ? "Updated \u2713" : "Saved \u2713");
   };
-  const revert = () => setScoreDraft(stored);
 
   if (selected.length === 0) {
     return <div className="empty"><div className="empty-title">FIXTURES NOT SET</div><p>The admin hasn't selected this gameweek's score-prediction fixtures yet. Check back once they do.</p></div>;
   }
   return (
     <div>
-      {locked && <div className="lock-banner">🔒 Score predictions for GW{gw} are locked.</div>}
-      <p className="helper" style={{ marginBottom:16 }}>Predict the exact scoreline, then hit Save. Outcome = {sc.scoreOutcome} pt · exact = {sc.scoreExact} pts. Predict a total above {sc.gfThreshold} for a shot at the Goal Fest Bonus.</p>
+      {locked && <div className="lock-banner">\U0001F512 Score predictions for GW{gw} are locked.</div>}
+      <p className="helper" style={{ marginBottom:16 }}>Predict the exact scoreline, then hit Save on each match. Outcome = {sc.scoreOutcome} pt \u00b7 exact = {sc.scoreExact} pts. Predict a total above {sc.gfThreshold} for a shot at the Goal Fest Bonus.</p>
       {selected.map(f => {
         const val = draft[f.id] || "";
         const parts = val.split("-");
         const p = parseScore(val);
         const gfEligible = p && (p[0]+p[1]) > sc.gfThreshold;
         const pts = locked ? scoreFixturePoints(val, f, sc) : null;
+        const saved = !!(stored[f.id]);
+        const matchDirty = (draft[f.id] || "") !== (stored[f.id] || "");
         return (
           <div key={f.id} className="fixture">
             <div className="fixture-head">
               <span>{f.kickoff ? new Date(f.kickoff).toLocaleString(undefined,{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : ("GW"+gw)}</span>
-              <span>{gfEligible ? <span className="gf-tag">⚡ GOAL FEST</span> : ""}</span>
+              <span>{gfEligible ? <span className="gf-tag">\u26a1 GOAL FEST</span> : ""}</span>
             </div>
             <div className="fixture-body">
               <div className="fx-team home" style={{ display:'flex', alignItems:'center', gap:8, justifyContent:'flex-end' }}><span>{fullName(f.teamH, f.teamHId)}</span><TeamBadge short={f.teamH} code={boot&&boot.teams&&boot.teams[f.teamHId]?boot.teams[f.teamHId].code:null} boot={boot} size={22} /></div>
               <div className="fx-score-in">
                 <input type="number" min="0" max="20" value={parts[0]||""} disabled={locked} placeholder="0" onChange={e=>setHalf(f.id,0,e.target.value)} />
-                <span className="fx-dash">–</span>
+                <span className="fx-dash">\u2013</span>
                 <input type="number" min="0" max="20" value={parts[1]||""} disabled={locked} placeholder="0" onChange={e=>setHalf(f.id,1,e.target.value)} />
               </div>
               <div className="fx-team" style={{ display:'flex', alignItems:'center', gap:8, justifyContent:'flex-start' }}><TeamBadge short={f.teamA} code={boot&&boot.teams&&boot.teams[f.teamAId]?boot.teams[f.teamAId].code:null} boot={boot} size={22} /><span>{fullName(f.teamA, f.teamAId)}</span></div>
             </div>
             {f.finished && (
               <div className="fx-result">
-                <span>FT · {f.teamH} {f.hScore}–{f.aScore} {f.teamA}</span>
+                <span>FT \u00b7 {f.teamH} {f.hScore}\u2013{f.aScore} {f.teamA}</span>
                 {locked ? <span className="pts">+{pts} pts</span> : <span>picks locked to score</span>}
+              </div>
+            )}
+            {!locked && (
+              <div className="fx-save">
+                <span className="save-status" style={{ color: matchDirty ? 'var(--accent)' : (saved ? 'var(--accent-2)' : 'var(--ink-mute)') }}>
+                  {matchDirty ? "\u25cf Unsaved" : saved ? "\u2713 Saved!" : "Not saved yet"}
+                </span>
+                <button className="btn btn-primary btn-sm" onClick={()=>saveOne(f.id)} disabled={!matchDirty}>{saved ? "Update" : "Save"}</button>
               </div>
             )}
           </div>
         );
       })}
-      {!locked && (
-        <div className="save-bar">
-          <span className="save-status" style={{ color: dirty ? 'var(--accent)' : 'var(--ink-mute)' }}>{dirty ? "● Unsaved changes" : "✓ All changes saved"}</span>
-          <div style={{ display:'flex', gap:8 }}>
-            {dirty && <button className="btn btn-ghost btn-sm" onClick={revert}>Undo changes</button>}
-            <button className="btn btn-primary" onClick={save} disabled={!dirty}>{hasSaved ? "Update predictions" : "Save predictions"}</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
