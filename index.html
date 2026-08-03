@@ -40,6 +40,8 @@
       radial-gradient(700px 400px at 50% 50%, rgba(124,58,237,0.04), transparent 70%);
   }
   .theme-toggle { display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:999px; border:1px solid var(--line); background:var(--card-2); font-size:16px; line-height:1; transition:border 0.15s, background 0.15s; }
+  .or-divider { display:flex; align-items:center; gap:12px; margin:18px 0; color:var(--ink-mute); font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:0.2em; text-transform:uppercase; }
+  .or-divider::before, .or-divider::after { content:''; height:1px; background:var(--line); flex:1; }
   .theme-toggle:hover { border-color:var(--accent); }
   .save-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; position:sticky; bottom:0; margin-top:16px; padding:14px 16px; background:var(--card); border:1px solid var(--line); border-radius:8px; box-shadow:0 -6px 20px rgba(0,0,0,0.18); z-index:5; }
   .save-status { font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; }
@@ -251,6 +253,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async></script>
 <script type="text/babel">
 const { useState, useEffect, useMemo, useCallback, useRef } = React;
 
@@ -260,6 +263,7 @@ const { useState, useEffect, useMemo, useCallback, useRef } = React;
 // ============================================================
 const API_STORE = '/api/store';
 const API_FPL = '/api/fpl';
+const API_AUTH = '/api/auth';
 const SYNC_POLL_MS = 30000;
 let apiReady = false;
 
@@ -323,6 +327,61 @@ async function setPersonal(key, value) { try { localStorage.setItem(key, JSON.st
 async function listShared(prefix) {
   if (apiReady) { const k = await remoteList(prefix); if (k.length) return k; }
   try { return Object.keys(localStorage).filter(k => k.startsWith(prefix)); } catch { return []; }
+}
+
+// ============================================================
+// GOOGLE SIGN-IN (optional, additive). The /api/auth endpoint verifies the
+// token server-side; here we only map the verified identity to a pundit.
+// ============================================================
+async function verifyGoogleCredential(credential) {
+  try {
+    const r = await fetch(API_AUTH, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ credential }) });
+    if (!r.ok) return { ok:false };
+    return await r.json();
+  } catch (e) { console.warn('google verify', e); return { ok:false }; }
+}
+// Google Identity Services uses one global callback; dispatch to the active handler.
+const _gsiHandlerRef = { current: null };
+function _gsiCallback(resp) { const h = _gsiHandlerRef.current; if (h) h(resp); }
+function gsiReady() { return !!(typeof window !== 'undefined' && window.google && window.google.accounts && window.google.accounts.id); }
+function initGsi() {
+  if (!GOOGLE_CLIENT_ID || !gsiReady()) return false;
+  if (!window.__gsiInit) { window.google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: _gsiCallback }); window.__gsiInit = true; }
+  return true;
+}
+// Look up an already-linked pundit for this Google account id.
+async function googleFindAccount(sub) {
+  const map = await getShared("pp_google:" + sub);
+  if (map && map.name) { const rec = await getShared("pp_pred:" + map.name); if (rec) return { ok:true, name: map.name }; }
+  return { ok:false };
+}
+// Create a new Google-linked pundit, or link Google to an existing account
+// (an existing password account requires its password to prove ownership).
+async function googleCreateOrLink(g, name, password) {
+  const clean = (name || "").trim();
+  if (!clean) return { ok:false, error:"Pick a display name" };
+  if (clean.length > 30) return { ok:false, error:"Keep the name under 30 characters" };
+  const existing = await getShared("pp_pred:" + clean);
+  const write = async (rec) => { await setShared("pp_pred:" + clean, rec); await setShared("pp_google:" + g.sub, { name: clean }); return { ok:true, name: clean }; };
+  if (!existing) return write({ name: clean, joined: Date.now(), googleSub: g.sub, email: g.email, scores:{}, teamPick:{}, f4:{}, survivor:{}, bonusAnswers:{} });
+  if (existing.googleSub && existing.googleSub === g.sub) return write(existing);
+  if (existing.googleSub && existing.googleSub !== g.sub) return { ok:false, error:"That name is taken. Please choose another." };
+  if (existing.passwordHash) {
+    const hash = await hashPassword(password || "", existing.salt);
+    if (hash !== existing.passwordHash) return { ok:false, error:"That name already has a password — enter it to link Google, or pick a new name." };
+    return write({ ...existing, googleSub: g.sub, email: g.email });
+  }
+  return write({ ...existing, googleSub: g.sub, email: g.email });
+}
+// Link a Google account to the currently signed-in pundit.
+async function googleLinkTo(user, g) {
+  const map = await getShared("pp_google:" + g.sub);
+  if (map && map.name && map.name !== user) return { ok:false, error:"That Google account is already linked to " + map.name };
+  const rec = await getShared("pp_pred:" + user);
+  if (!rec) return { ok:false, error:"Account not found — refresh and try again" };
+  await setShared("pp_pred:" + user, { ...rec, googleSub: g.sub, email: g.email });
+  await setShared("pp_google:" + g.sub, { name: user });
+  return { ok:true };
 }
 
 // ============================================================
@@ -394,6 +453,10 @@ const ADMIN_PASSWORD = "Propundit007!@";     // change before sharing publicly
 const EXPORT_LOGINS = [
   { username: "PPDATA", password: "Ppdata2026!@" },
 ];
+// Google Sign-In (optional): paste your OAuth 2.0 "Web application" client ID from
+// the Google Cloud console to enable the "Continue with Google" button. Leave the
+// string empty to hide Google login entirely (name/password still works).
+const GOOGLE_CLIENT_ID = "";
 const TOTAL_GW = 38;
 const HALF_SPLIT = 19; // GW1-19 first half, GW20-38 second half
 const POSITIONS = ["GK", "DEF", "MID", "FWD"];
@@ -872,7 +935,7 @@ function App() {
           <div>© {new Date().getFullYear()} Pro Pundit League</div>
         </footer>
       </div>
-      {showAccount && <AccountModal user={user} onClose={()=>setShowAccount(false)} changeMyPassword={changeMyPassword} showToast={showToast} />}
+      {showAccount && <AccountModal user={user} onClose={()=>setShowAccount(false)} changeMyPassword={changeMyPassword} showToast={showToast} myPred={myPred} />}
       {toast && <div className="toast">{toast}</div>}
     </>
   );
@@ -881,7 +944,31 @@ function App() {
 // ============================================================
 // LOGIN
 // ============================================================
-function AccountModal({ user, onClose, changeMyPassword, showToast }) {
+function GoogleButton({ onCredential, text }) {
+  const ref = useRef(null);
+  _gsiHandlerRef.current = onCredential;   // keep the active handler current
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID) return;
+    let tries = 0;
+    const id = setInterval(() => {
+      if (gsiReady()) {
+        clearInterval(id);
+        if (initGsi() && ref.current) {
+          try {
+            ref.current.innerHTML = "";
+            const light = (typeof document !== 'undefined') && document.documentElement.classList.contains('light');
+            window.google.accounts.id.renderButton(ref.current, { theme: light ? 'outline' : 'filled_blue', size: 'large', text: text || 'continue_with', shape: 'pill', logo_alignment: 'left', width: 260 });
+          } catch (e) { console.warn('gsi render', e); }
+        }
+      } else if (++tries > 50) { clearInterval(id); }
+    }, 100);
+    return () => { clearInterval(id); if (_gsiHandlerRef.current === onCredential) _gsiHandlerRef.current = null; };
+  }, []);
+  if (!GOOGLE_CLIENT_ID) return null;
+  return <div ref={ref} style={{ display:'flex', justifyContent:'center', minHeight:44 }} />;
+}
+
+function AccountModal({ user, onClose, changeMyPassword, showToast, myPred }) {
   const [cur, setCur] = useState(""); const [nw, setNw] = useState(""); const [nw2, setNw2] = useState("");
   const [busy, setBusy] = useState(false); const [err, setErr] = useState("");
   const submit = async () => {
@@ -894,6 +981,14 @@ function AccountModal({ user, onClose, changeMyPassword, showToast }) {
     if (r && r.ok) { showToast("Password updated"); onClose(); }
     else setErr((r && r.msg) || "Couldn't update password");
   };
+  const handleLinkGoogle = async (resp) => {
+    if (!resp || !resp.credential) return;
+    const v = await verifyGoogleCredential(resp.credential);
+    if (!v || !v.ok || !v.sub) { showToast("Google verification failed"); return; }
+    const r = await googleLinkTo(user, { sub: v.sub, email: v.email || "" });
+    if (r.ok) { showToast("Google account linked ✓"); onClose(); }
+    else showToast(r.error || "Couldn't link Google");
+  };
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth:440 }} onClick={e=>e.stopPropagation()}>
@@ -904,6 +999,15 @@ function AccountModal({ user, onClose, changeMyPassword, showToast }) {
           <div className="field"><label>New password</label><input type="password" value={nw} onChange={e=>setNw(e.target.value)} placeholder="Min 4 characters" /></div>
           <div className="field"><label>Confirm new password</label><input type="password" value={nw2} onChange={e=>setNw2(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="Type it again" /></div>
           {err && <div style={{ color:'var(--red)', fontSize:13 }}>{err}</div>}
+          {GOOGLE_CLIENT_ID ? (
+            <React.Fragment>
+              <div className="divider" style={{ margin:'18px 0' }}></div>
+              <label style={{ fontFamily:'JetBrains Mono', fontSize:10, color:'var(--ink-mute)', letterSpacing:'0.15em', textTransform:'uppercase' }}>Google sign-in</label>
+              {myPred && myPred.googleSub
+                ? <p className="helper" style={{ marginTop:6 }}>✓ Your Google account is linked — you can sign in with Google next time.</p>
+                : <div style={{ marginTop:8 }}><p className="helper" style={{ marginBottom:10 }}>Link your Google account to sign in with one tap next time.</p><GoogleButton onCredential={handleLinkGoogle} text="continue_with" /></div>}
+            </React.Fragment>
+          ) : null}
         </div>
         <div className="modal-foot">
           <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
@@ -919,6 +1023,7 @@ function LoginView({ onLogin, remoteAvailable }) {
   const [name, setName] = useState("");
   const [pw, setPw] = useState(""); const [pw2, setPw2] = useState("");
   const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
+  const [googleAuth, setGoogleAuth] = useState(null);
   const clean = name.trim();
 
   const checkName = async () => {
@@ -953,7 +1058,24 @@ function LoginView({ onLogin, remoteAvailable }) {
     }
     setBusy(false); onLogin(clean);
   };
-  const goBack = () => { setStep("name"); setPw(""); setPw2(""); setError(""); };
+  const handleGoogle = async (resp) => {
+    if (!resp || !resp.credential) return;
+    setBusy(true); setError("");
+    const v = await verifyGoogleCredential(resp.credential);
+    if (!v || !v.ok || !v.sub) { setBusy(false); setError("Google sign-in failed — please try again."); return; }
+    const found = await googleFindAccount(v.sub);
+    if (found.ok) { setBusy(false); onLogin(found.name); return; }
+    setGoogleAuth({ sub: v.sub, email: v.email || "", gname: v.name || "" });
+    setName((v.name || "").slice(0, 30)); setPw(""); setBusy(false); setStep("google-name");
+  };
+  const finishGoogle = async () => {
+    if (!googleAuth) { setStep("name"); setError("Google session expired — start again."); return; }
+    setBusy(true); setError("");
+    const r = await googleCreateOrLink(googleAuth, name, pw);
+    setBusy(false);
+    if (r.ok) onLogin(r.name); else setError(r.error || "Couldn't finish Google sign-in");
+  };
+  const goBack = () => { setStep("name"); setPw(""); setPw2(""); setError(""); setGoogleAuth(null); };
 
   return (
     <div className="app">
@@ -966,6 +1088,7 @@ function LoginView({ onLogin, remoteAvailable }) {
             {step === "signin" && <>Welcome back, <strong style={{ color: 'var(--accent)' }}>{clean}</strong>. Enter your password to make your picks.</>}
             {step === "claim" && <><strong style={{ color: 'var(--accent)' }}>{clean}</strong> exists but has no password yet. Set one now to protect your picks.</>}
             {step === "signup" && <>New pundit. Pick a password — you'll need it every time you sign in, and the admin can reset it if you forget.</>}
+            {step === "google-name" && <>Signed in with Google{googleAuth && googleAuth.email ? <> as <strong style={{ color:'var(--accent)' }}>{googleAuth.email}</strong></> : ""}. Pick your league name to finish.</>}
           </p>
           {!remoteAvailable && (
             <div className="lock-banner" style={{ borderColor: 'rgba(255,77,77,0.3)', color: 'var(--red)' }}>
@@ -981,6 +1104,7 @@ function LoginView({ onLogin, remoteAvailable }) {
               </div>
               {error && <div style={{ color:'var(--red)', fontSize:13, marginBottom:12 }}>{error}</div>}
               <button className="btn btn-primary" onClick={checkName} disabled={busy} style={{ width:'100%', justifyContent:'center', padding:'14px' }}>{busy?"Checking…":"Continue →"}</button>
+              {GOOGLE_CLIENT_ID ? (<React.Fragment><div className="or-divider"><span>or</span></div><GoogleButton onCredential={handleGoogle} text="continue_with" /></React.Fragment>) : null}
             </>
           )}
           {step === "signin" && (
@@ -1005,6 +1129,24 @@ function LoginView({ onLogin, remoteAvailable }) {
               <div style={{ display:'flex', gap:8 }}>
                 <button className="btn btn-ghost" onClick={goBack} disabled={busy}>← Back</button>
                 <button className="btn btn-primary" onClick={doSignupOrClaim} disabled={busy} style={{ flex:1, justifyContent:'center' }}>{busy?"Setting up…":step==="signup"?"Join the league →":"Save & sign in →"}</button>
+              </div>
+            </>
+          )}
+          {step === "google-name" && (
+            <>
+              <div className="field">
+                <label>Display name for the league</label>
+                <input type="text" placeholder="Your name" value={name} onChange={e=>setName(e.target.value)} autoFocus disabled={busy} />
+                <div className="helper">This is how you'll show up on the leaderboard. Already play under a name that has a password? Type that exact name and enter its password below to link Google to it.</div>
+              </div>
+              <div className="field">
+                <label>Existing password (only if linking an existing name)</label>
+                <input type="password" placeholder="Leave blank for a brand-new account" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&finishGoogle()} disabled={busy} />
+              </div>
+              {error && <div style={{ color:'var(--red)', fontSize:13, marginBottom:12 }}>{error}</div>}
+              <div style={{ display:'flex', gap:8 }}>
+                <button className="btn btn-ghost" onClick={goBack} disabled={busy}>← Back</button>
+                <button className="btn btn-primary" onClick={finishGoogle} disabled={busy} style={{ flex:1, justifyContent:'center' }}>{busy?"Setting up…":"Continue →"}</button>
               </div>
             </>
           )}
