@@ -26,6 +26,28 @@
     --red: #ff4d4d;
     --yellow: #ffd43b;
   }
+  html.light {
+    --bg:#f5f3fb; --bg-2:#ffffff; --card:#ffffff; --card-2:#f3eefb;
+    --line:#e5e1ef; --line-bright:#d3cce1;
+    --ink:#1b1430; --ink-dim:#4c4363; --ink-mute:#857aa0;
+    --accent:#e90052; --accent-2:#06a35a; --green:#06a35a;
+    --red:#d92d2d; --yellow:#b07d00; --purple:#7c3aed; --cyan:#0891b2;
+  }
+  html.light body {
+    background-image:
+      radial-gradient(1200px 600px at 90% -10%, rgba(233,0,82,0.06), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(6,179,104,0.05), transparent 60%),
+      radial-gradient(700px 400px at 50% 50%, rgba(124,58,237,0.04), transparent 70%);
+  }
+  .theme-toggle { display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:999px; border:1px solid var(--line); background:var(--card-2); font-size:16px; line-height:1; transition:border 0.15s, background 0.15s; }
+  .theme-toggle:hover { border-color:var(--accent); }
+  .save-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; position:sticky; bottom:0; margin-top:16px; padding:14px 16px; background:var(--card); border:1px solid var(--line); border-radius:8px; box-shadow:0 -6px 20px rgba(0,0,0,0.18); z-index:5; }
+  .save-status { font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; }
+  .quick-nav { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
+  .qn-btn { display:flex; align-items:center; gap:10px; padding:14px 16px; border:1px solid var(--line); border-radius:8px; background:var(--bg-2); color:var(--ink); font-weight:600; font-size:14px; text-align:left; transition:border 0.15s, transform 0.05s; }
+  .qn-btn:hover { border-color:var(--accent); }
+  .qn-btn:active { transform:scale(0.98); }
+  .qn-emoji { font-size:20px; line-height:1; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { background: var(--bg); color: var(--ink); font-family: 'Inter Tight', sans-serif; min-height: 100vh; }
   body {
@@ -138,7 +160,7 @@
   .fx-daygroup { margin-top:20px; }
   .fx-dayhdr { font-family:'JetBrains Mono'; font-size:11px; letter-spacing:0.14em; color:var(--ink-mute); text-transform:uppercase; margin:0 0 10px; }
   .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.72); display:flex; align-items:flex-start; justify-content:center; padding:24px 16px; z-index:200; overflow:auto; }
-  .modal { background:#14141c; border:1px solid var(--line); border-radius:12px; width:100%; max-width:680px; box-shadow:0 24px 60px rgba(0,0,0,0.5); }
+  .modal { background:var(--card); border:1px solid var(--line); border-radius:12px; width:100%; max-width:680px; box-shadow:0 24px 60px rgba(0,0,0,0.5); }
   .modal-head { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); }
   .modal-head h3 { margin:0; font-family:'Anton'; font-size:22px; letter-spacing:0.02em; }
   .modal-body { padding:16px 20px; max-height:64vh; overflow:auto; }
@@ -620,10 +642,15 @@ function App() {
   const [remoteAvailable, setRemoteAvailable] = useState(false);
   const [fplBusy, setFplBusy] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
+  const [predictTab, setPredictTab] = useState("scores");
+  const [theme, setTheme] = useState(() => { try { return localStorage.getItem("pp_theme") === "light" ? "light" : "dark"; } catch { return "dark"; } });
+  useEffect(() => { try { document.documentElement.classList.toggle("light", theme === "light"); } catch {} try { localStorage.setItem("pp_theme", theme); } catch {} }, [theme]);
   const stateRef = useRef(null);
   useEffect(() => { stateRef.current = state; }, [state]);
 
   const showToast = useCallback((msg) => { setToast(msg); setTimeout(() => setToast(null), 2600); }, []);
+  const goPredict = useCallback((t) => { setPredictTab(t || "scores"); setView("predict"); }, []);
+  const toggleTheme = useCallback(() => setTheme(t => t === "light" ? "dark" : "light"), []);
 
   // ---- load-safe shared state ----
   const refreshState = useCallback(async () => {
@@ -816,7 +843,10 @@ function App() {
             <div className="brand-mark">PRO <span className="accent">PUNDIT</span> LEAGUE</div>
             <div className="brand-sub">Season 6 · {state.season} · Premier League</div>
           </div>
-          <div className="user-pill"><span className="dot"></span><span>{user}</span><button onClick={()=>setShowAccount(true)}>password</button><button onClick={logout}>switch</button></div>
+          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+            <button className="theme-toggle" onClick={toggleTheme} title="Toggle day / night mode" aria-label="Toggle day or night mode">{theme==="light" ? "🌙" : "☀️"}</button>
+            <div className="user-pill"><span className="dot"></span><span>{user}</span><button onClick={()=>setShowAccount(true)}>password</button><button onClick={logout}>switch</button></div>
+          </div>
         </header>
         <nav className="nav">
           <button className={view==="home"?"active":""} onClick={()=>setView("home")}>Home</button>
@@ -828,8 +858,8 @@ function App() {
           <button className={view==="admin"?"active":""} onClick={()=>setView("admin")}>Admin</button>
         </nav>
 
-        {view==="home" && <HomeView state={state} user={user} myPred={myPred} standings={standings} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} setView={setView} />}
-        {view==="predict" && <PredictView state={state} myPred={myPred} users={users} fpl={fpl} updateMyPred={updateMyPred} showToast={showToast} />}
+        {view==="home" && <HomeView state={state} user={user} myPred={myPred} standings={standings} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} setView={setView} goPredict={goPredict} />}
+        {view==="predict" && <PredictView state={state} myPred={myPred} users={users} fpl={fpl} updateMyPred={updateMyPred} showToast={showToast} tab={predictTab} setTab={setPredictTab} />}
         {view==="fixtures" && <FixturesView state={state} fpl={fpl} />}
         {view==="picks" && <PicksView state={state} users={users} currentUser={user} fpl={fpl} />}
         {view==="leaderboard" && <LeaderboardView standings={standings} currentUser={user} state={state} users={users} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} />}
@@ -987,7 +1017,7 @@ function LoginView({ onLogin, remoteAvailable }) {
 // ============================================================
 // HOME
 // ============================================================
-function HomeView({ state, user, myPred, standings, fpl, fplBusy, onRefresh, setView }) {
+function HomeView({ state, user, myPred, standings, fpl, fplBusy, onRefresh, setView, goPredict }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
 
@@ -1039,6 +1069,17 @@ function HomeView({ state, user, myPred, standings, fpl, fplBusy, onRefresh, set
         <div className="stat"><div className="stat-label">League Leader</div><div className="stat-value" style={{ fontSize:24 }}>{leader ? leader.name.toUpperCase() : "—"}</div><div className="stat-sub">{leader ? `${leader.total} points` : "no points yet"}</div></div>
         <div className="stat"><div className="stat-label">Gameweek</div><div className="stat-value green">{activeGW}</div><div className="stat-sub">{locked ? "locked" : "open for picks"}</div></div>
         <div className="stat"><div className="stat-label">Pundits</div><div className="stat-value" style={{ fontSize:34 }}>{standings.length}</div><div className="stat-sub">in the league</div></div>
+      </div>
+
+      <div className="card" style={{ marginBottom:18 }}>
+        <div className="card-title" style={{ fontSize:18 }}>Jump to your picks</div>
+        <div className="quick-nav">
+          <button className="qn-btn" onClick={()=>goPredict("scores")}><span className="qn-emoji">🎯</span>Score Predictions</button>
+          <button className="qn-btn" onClick={()=>goPredict("team")}><span className="qn-emoji">🛡️</span>Team of the Week</button>
+          <button className="qn-btn" onClick={()=>goPredict("f4")}><span className="qn-emoji">⭐</span>Fantastic Four</button>
+          {state.survivorEnabled && <button className="qn-btn" onClick={()=>goPredict("survivor")}><span className="qn-emoji">💀</span>Survivor</button>}
+          <button className="qn-btn" onClick={()=>goPredict("bonus")}><span className="qn-emoji">❓</span>Bonus</button>
+        </div>
       </div>
 
       <div className="grid grid-2">
@@ -1264,12 +1305,13 @@ function playersByTeamPos(players) {
   return out;
 }
 
-function PredictView({ state, myPred, users, fpl, updateMyPred, showToast }) {
-  const [tab, setTab] = useState("scores");
+function PredictView({ state, myPred, users, fpl, updateMyPred, showToast, tab, setTab }) {
   const openGWs = (state.openGWs && state.openGWs.length) ? state.openGWs.slice() : [state.activeGW || 1];
   const selectable = Array.from(new Set([...openGWs, state.activeGW || 1])).sort((a, b) => a - b);
   const [gw, setGw] = useState(state.activeGW || 1);
   useEffect(() => { if (!selectable.includes(gw)) setGw(state.activeGW || 1); }, [selectable.join(","), state.activeGW]);
+  const [scoreDraft, setScoreDraft] = useState(() => (myPred && myPred.scores && myPred.scores[state.activeGW || 1]) || {});
+  useEffect(() => { setScoreDraft((myPred && myPred.scores && myPred.scores[gw]) || {}); }, [gw]);
   const locked = gwLocked(state, fpl, gw);
   const fixtures = (fpl.fixturesByGW && fpl.fixturesByGW[gw]) || [];
   const live = (fpl.liveByGW && fpl.liveByGW[gw]) || {};
@@ -1304,7 +1346,7 @@ function PredictView({ state, myPred, users, fpl, updateMyPred, showToast }) {
         <button className={tab==="bonus"?"active":""} onClick={()=>setTab("bonus")}>Bonus</button>
       </div>
 
-      {tab==="scores" && <ScoresTab state={state} gw={gw} locked={locked} fixtures={fixtures} boot={boot} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
+      {tab==="scores" && <ScoresTab state={state} gw={gw} locked={locked} fixtures={fixtures} boot={boot} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} scoreDraft={scoreDraft} setScoreDraft={setScoreDraft} />}
       {tab==="team" && <TeamTab state={state} gw={gw} locked={locked} fixtures={fixtures} boot={boot} fpl={fpl} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
       {tab==="f4" && <F4Tab state={state} gw={gw} locked={locked} live={live} boot={boot} fixtures={fixtures} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
       {tab==="survivor" && <SurvivorTab state={state} gw={gw} locked={locked} fixtures={fixtures} myPred={myPred} fpl={fpl} updateMyPred={updateMyPred} showToast={showToast} />}
@@ -1313,20 +1355,29 @@ function PredictView({ state, myPred, users, fpl, updateMyPred, showToast }) {
   );
 }
 
-function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, showToast }) {
+function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, showToast, scoreDraft, setScoreDraft }) {
   const sc = state.scoring || DEFAULT_SCORING;
   const selIds = (state.selectedFixtures && state.selectedFixtures[gw]) || [];
   const selected = selIds.map(id => fixtures.find(f => String(f.id) === String(id))).filter(Boolean);
-  const preds = (myPred.scores && myPred.scores[gw]) || {};
+  const stored = (myPred.scores && myPred.scores[gw]) || {};
+  const draft = scoreDraft || {};
   const fullName = (short, id) => (boot && boot.teams && boot.teams[id]) ? boot.teams[id].name : short;
+  const dirty = selected.some(f => (draft[f.id] || "") !== (stored[f.id] || ""));
+  const hasSaved = selected.some(f => (stored[f.id] || "") !== "");
 
   const setHalf = (fid, which, val) => {
     if (locked) { showToast("Gameweek locked"); return; }
     const v = val.replace(/[^0-9]/g, "").slice(0,2);
-    const cur = (preds[fid] || "").split("-");
+    const cur = (draft[fid] || "").split("-");
     const next = which === 0 ? `${v}-${cur[1]||""}` : `${cur[0]||""}-${v}`;
-    updateMyPred(p => ({ ...p, scores: { ...p.scores, [gw]: { ...(p.scores && p.scores[gw]), [fid]: next } } }));
+    setScoreDraft(d => ({ ...(d||{}), [fid]: next }));
   };
+  const save = () => {
+    if (locked) { showToast("Gameweek locked"); return; }
+    updateMyPred(p => ({ ...p, scores: { ...p.scores, [gw]: { ...draft } } }));
+    showToast("Predictions saved");
+  };
+  const revert = () => setScoreDraft(stored);
 
   if (selected.length === 0) {
     return <div className="empty"><div className="empty-title">FIXTURES NOT SET</div><p>The admin hasn't selected this gameweek's score-prediction fixtures yet. Check back once they do.</p></div>;
@@ -1334,9 +1385,9 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
   return (
     <div>
       {locked && <div className="lock-banner">🔒 Score predictions for GW{gw} are locked.</div>}
-      <p className="helper" style={{ marginBottom:16 }}>Predict the exact scoreline. Outcome = {sc.scoreOutcome} pt · exact = {sc.scoreExact} pts. Predict a total above {sc.gfThreshold} for a shot at the Goal Fest Bonus.</p>
+      <p className="helper" style={{ marginBottom:16 }}>Predict the exact scoreline, then hit Save. Outcome = {sc.scoreOutcome} pt · exact = {sc.scoreExact} pts. Predict a total above {sc.gfThreshold} for a shot at the Goal Fest Bonus.</p>
       {selected.map(f => {
-        const val = preds[f.id] || "";
+        const val = draft[f.id] || "";
         const parts = val.split("-");
         const p = parseScore(val);
         const gfEligible = p && (p[0]+p[1]) > sc.gfThreshold;
@@ -1365,6 +1416,15 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
           </div>
         );
       })}
+      {!locked && (
+        <div className="save-bar">
+          <span className="save-status" style={{ color: dirty ? 'var(--accent)' : 'var(--ink-mute)' }}>{dirty ? "● Unsaved changes" : "✓ All changes saved"}</span>
+          <div style={{ display:'flex', gap:8 }}>
+            {dirty && <button className="btn btn-ghost btn-sm" onClick={revert}>Undo changes</button>}
+            <button className="btn btn-primary" onClick={save} disabled={!dirty}>{hasSaved ? "Update predictions" : "Save predictions"}</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1395,6 +1455,7 @@ function TeamTab({ state, gw, locked, fixtures, boot, fpl, myPred, updateMyPred,
     if (locked || !pick) return;
     updateMyPred(p => ({ ...p, teamPick: { ...p.teamPick, [gw]: { ...pick, oppTag: opp } } }));
   };
+  const clear = () => { if (locked) { showToast("Gameweek locked"); return; } updateMyPred(p => ({ ...p, teamPick: { ...p.teamPick, [gw]: undefined } })); };
 
   let resultLine = null;
   if (locked && pick && pick.team) {
@@ -1422,6 +1483,11 @@ function TeamTab({ state, gw, locked, fixtures, boot, fpl, myPred, updateMyPred,
           );
         })}
       </div>
+      {pick && pick.team && !locked && (
+        <div style={{ marginTop:14 }}>
+          <button className="btn btn-ghost btn-sm" onClick={clear}>✕ Clear team pick</button>
+        </div>
+      )}
       {pick && pick.team && (
         <div className="card" style={{ marginTop:18 }}>
           <div style={{ display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
@@ -1474,6 +1540,8 @@ function F4Tab({ state, gw, locked, live, boot, fixtures, myPred, updateMyPred, 
   };
   const teamList = Object.values(teams || {}).sort((a,b)=>a.name.localeCompare(b.name));
   const sum = f4Points(f4, live, sc);
+  const hasAny = POSITIONS.some(pos => f4[slotKey[pos]]);
+  const clearAll = () => { if (locked) { showToast("Gameweek locked"); return; } updateMyPred(p => ({ ...p, f4: { ...p.f4, [gw]: {} } })); };
   return (
     <div>
       {locked && <div className="lock-banner">🔒 Fantastic Four for GW{gw} is locked.</div>}
@@ -1485,9 +1553,14 @@ function F4Tab({ state, gw, locked, live, boot, fixtures, myPred, updateMyPred, 
           <F4Slot key={pos} pos={pos} gw={gw} locked={locked} current={current}
             players={players} teams={teamList} teamsById={teams} byTeamPos={byTeamPos}
             isAvailable={isAvailable} live={live} fixtures={fixtures} boot={boot}
-            onPick={(pid)=>setPlayer(pos, pid)} showToast={showToast} />
+            onPick={(pid)=>setPlayer(pos, pid)} onClear={()=>setPlayer(pos, undefined)} showToast={showToast} />
         );
       })}
+      {!locked && hasAny && (
+        <div style={{ marginBottom:12 }}>
+          <button className="btn btn-ghost btn-sm" onClick={clearAll}>✕ Clear all four</button>
+        </div>
+      )}
       <div className="card" style={{ marginTop:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
         <div className="card-title" style={{ margin:0, fontSize:18 }}>Fantastic Four total (GW{gw})</div>
         <div style={{ fontFamily:'Anton', fontSize:32, color:'var(--accent-2)' }}>{sum}</div>
@@ -1496,7 +1569,7 @@ function F4Tab({ state, gw, locked, live, boot, fixtures, myPred, updateMyPred, 
   );
 }
 
-function F4Slot({ pos, gw, locked, current, players, teams, teamsById, byTeamPos, isAvailable, live, fixtures, boot, onPick, showToast }) {
+function F4Slot({ pos, gw, locked, current, players, teams, teamsById, byTeamPos, isAvailable, live, fixtures, boot, onPick, onClear, showToast }) {
   const [open, setOpen] = useState(false);
   const pts = current ? (Number(live[current.id]) || 0) : null;
   const showPts = current && (locked || (live && live[current.id] != null));
@@ -1521,7 +1594,10 @@ function F4Slot({ pos, gw, locked, current, players, teams, teamsById, byTeamPos
         </div>
         <div style={{ textAlign:'right' }}>
           {showPts ? <div style={{ fontFamily:'Anton', fontSize:26, color:'var(--accent-2)' }}>{pts}</div> : null}
-          <button className="btn btn-sm btn-primary" style={{ marginTop:8 }} disabled={locked} onClick={()=>setOpen(true)}>{current ? "Swap" : "Choose"}</button>
+          <div style={{ display:'flex', gap:6, justifyContent:'flex-end', marginTop:8, flexWrap:'wrap' }}>
+            {current && !locked && <button className="btn btn-ghost btn-sm" onClick={onClear}>Clear</button>}
+            <button className="btn btn-sm btn-primary" disabled={locked} onClick={()=>setOpen(true)}>{current ? "Swap" : "Choose"}</button>
+          </div>
         </div>
       </div>
       {open && !locked && (
@@ -1652,6 +1728,7 @@ function SurvivorTab({ state, gw, locked, fixtures, myPred, fpl, updateMyPred, s
     if (used.includes(team) && !(pick && pick.team === team)) { showToast(team + " already used in survivor"); return; }
     updateMyPred(p => ({ ...p, survivor: { ...p.survivor, [gw]: { team } } }));
   };
+  const clear = () => { if (locked) { showToast("Gameweek locked"); return; } updateMyPred(p => ({ ...p, survivor: { ...p.survivor, [gw]: undefined } })); };
 
   let resultLine = null;
   if (locked && pick && pick.team) {
@@ -1680,6 +1757,11 @@ function SurvivorTab({ state, gw, locked, fixtures, myPred, fpl, updateMyPred, s
               <span className="uses">{opponentsInGW(fixtures, t).join(" · ")}</span>
               <span className="uses">{isUsed?"used":"available"}</span></div>;
           })}
+        </div>
+      )}
+      {pick && pick.team && !locked && !isOut && (
+        <div style={{ marginTop:14 }}>
+          <button className="btn btn-ghost btn-sm" onClick={clear}>✕ Clear survivor pick</button>
         </div>
       )}
       {resultLine}
