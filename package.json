@@ -4,6 +4,7 @@
   "private": true,
   "description": "Pro Pundit League — Premier League prediction game",
   "dependencies": {
-    "@upstash/redis": "^1.34.0"
+    "@upstash/redis": "^1.34.0",
+    "google-auth-library": "^9.0.0"
   }
 }
