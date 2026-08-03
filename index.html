@@ -1376,7 +1376,7 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
     if (locked) { showToast("Gameweek locked"); return; }
     const already = !!(stored[fid]);
     updateMyPred(p => ({ ...p, scores: { ...p.scores, [gw]: { ...(p.scores && p.scores[gw]), [fid]: (draft[fid] || "") } } }));
-    showToast(already ? "Updated \u2713" : "Saved \u2713");
+    showToast(already ? "Updated ✓" : "Saved ✓");
   };
 
   if (selected.length === 0) {
@@ -1384,8 +1384,8 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
   }
   return (
     <div>
-      {locked && <div className="lock-banner">\U0001F512 Score predictions for GW{gw} are locked.</div>}
-      <p className="helper" style={{ marginBottom:16 }}>Predict the exact scoreline, then hit Save on each match. Outcome = {sc.scoreOutcome} pt \u00b7 exact = {sc.scoreExact} pts. Predict a total above {sc.gfThreshold} for a shot at the Goal Fest Bonus.</p>
+      {locked && <div className="lock-banner">🔒 Score predictions for GW{gw} are locked.</div>}
+      <p className="helper" style={{ marginBottom:16 }}>Predict the exact scoreline, then hit Save on each match. Outcome = {sc.scoreOutcome} pt · exact = {sc.scoreExact} pts. Predict a total above {sc.gfThreshold} for a shot at the Goal Fest Bonus.</p>
       {selected.map(f => {
         const val = draft[f.id] || "";
         const parts = val.split("-");
@@ -1398,27 +1398,27 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
           <div key={f.id} className="fixture">
             <div className="fixture-head">
               <span>{f.kickoff ? new Date(f.kickoff).toLocaleString(undefined,{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : ("GW"+gw)}</span>
-              <span>{gfEligible ? <span className="gf-tag">\u26a1 GOAL FEST</span> : ""}</span>
+              <span>{gfEligible ? <span className="gf-tag">⚡ GOAL FEST</span> : ""}</span>
             </div>
             <div className="fixture-body">
               <div className="fx-team home" style={{ display:'flex', alignItems:'center', gap:8, justifyContent:'flex-end' }}><span>{fullName(f.teamH, f.teamHId)}</span><TeamBadge short={f.teamH} code={boot&&boot.teams&&boot.teams[f.teamHId]?boot.teams[f.teamHId].code:null} boot={boot} size={22} /></div>
               <div className="fx-score-in">
                 <input type="number" min="0" max="20" value={parts[0]||""} disabled={locked} placeholder="0" onChange={e=>setHalf(f.id,0,e.target.value)} />
-                <span className="fx-dash">\u2013</span>
+                <span className="fx-dash">–</span>
                 <input type="number" min="0" max="20" value={parts[1]||""} disabled={locked} placeholder="0" onChange={e=>setHalf(f.id,1,e.target.value)} />
               </div>
               <div className="fx-team" style={{ display:'flex', alignItems:'center', gap:8, justifyContent:'flex-start' }}><TeamBadge short={f.teamA} code={boot&&boot.teams&&boot.teams[f.teamAId]?boot.teams[f.teamAId].code:null} boot={boot} size={22} /><span>{fullName(f.teamA, f.teamAId)}</span></div>
             </div>
             {f.finished && (
               <div className="fx-result">
-                <span>FT \u00b7 {f.teamH} {f.hScore}\u2013{f.aScore} {f.teamA}</span>
+                <span>FT · {f.teamH} {f.hScore}–{f.aScore} {f.teamA}</span>
                 {locked ? <span className="pts">+{pts} pts</span> : <span>picks locked to score</span>}
               </div>
             )}
             {!locked && (
               <div className="fx-save">
                 <span className="save-status" style={{ color: matchDirty ? 'var(--accent)' : (saved ? 'var(--accent-2)' : 'var(--ink-mute)') }}>
-                  {matchDirty ? "\u25cf Unsaved" : saved ? "\u2713 Saved!" : "Not saved yet"}
+                  {matchDirty ? "● Unsaved" : saved ? "✓ Saved!" : "Not saved yet"}
                 </span>
                 <button className="btn btn-primary btn-sm" onClick={()=>saveOne(f.id)} disabled={!matchDirty}>{saved ? "Update" : "Save"}</button>
               </div>
