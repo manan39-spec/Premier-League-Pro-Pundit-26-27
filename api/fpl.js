@@ -64,9 +64,9 @@ export default async function handler(req, res) {
 
     if (resource === 'fixtures') {
       const gw = parseInt(req.query.gw, 10);
-      if (!gw) return res.status(400).json({ error: 'gw required' });
+      // With ?gw=<n> -> that gameweek. Without gw -> the whole season (for the FDR grid).
       const [fixtures, boot] = await Promise.all([
-        fplFetch(`/fixtures/?event=${gw}`),
+        fplFetch(gw ? `/fixtures/?event=${gw}` : '/fixtures/'),
         fplFetch('/bootstrap-static/'),
       ]);
       const short = {};
@@ -77,10 +77,12 @@ export default async function handler(req, res) {
         teamH: short[f.team_h] || String(f.team_h),
         teamA: short[f.team_a] || String(f.team_a),
         hScore: f.team_h_score, aScore: f.team_a_score,
+        hDiff: f.team_h_difficulty, aDiff: f.team_a_difficulty, // FPL fixture difficulty 1-5
         finished: !!(f.finished || f.finished_provisional),
         kickoff: f.kickoff_time,
       }));
-      res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120');
+      // The all-season response is bigger and changes rarely -> cache it longer.
+      res.setHeader('Cache-Control', gw ? 's-maxage=60, stale-while-revalidate=120' : 's-maxage=600, stale-while-revalidate=1800');
       return res.status(200).json({ fixtures: out });
     }
 
