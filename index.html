@@ -49,6 +49,21 @@
   .bb-btn .bb-lbl { max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .bb-btn:hover { color:var(--ink); }
   .bb-btn.active { color:var(--accent); background:rgba(233,0,82,0.10); }
+  .fdr-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .fdr-table { border-collapse:separate; border-spacing:0; width:auto; }
+  .fdr-th, .fdr-th-team { font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:0.06em; color:var(--ink-mute); text-transform:uppercase; font-weight:500; padding:10px 8px; text-align:center; white-space:nowrap; border-bottom:1px solid var(--line); background:var(--card); }
+  .fdr-th-date { font-size:9px; margin-top:2px; font-weight:400; opacity:0.85; }
+  .fdr-th-team { position:sticky; left:0; z-index:3; text-align:left; cursor:pointer; min-width:132px; }
+  .fdr-td-team { position:sticky; left:0; z-index:2; background:var(--card); padding:5px 10px; border-bottom:1px solid var(--line); min-width:132px; }
+  .fdr-team-inner { display:flex; align-items:center; gap:8px; }
+  .fdr-tn { font-weight:700; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .fdr-nm-short { display:none; }
+  .fdr-td { padding:4px 4px; border-bottom:1px solid var(--line); text-align:center; }
+  .fdr-chip { min-width:66px; text-align:center; font-family:'JetBrains Mono', monospace; font-size:11px; font-weight:700; padding:8px 6px; border-radius:6px; letter-spacing:0.01em; margin:2px auto; white-space:nowrap; }
+  .fdr-blank { min-width:66px; text-align:center; color:var(--ink-mute); font-family:'JetBrains Mono', monospace; padding:8px 6px; }
+  .fdr-key { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .fdr-key-lbl, .fdr-key-ends { font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--ink-mute); }
+  .fdr-key-box { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:5px; font-family:'JetBrains Mono', monospace; font-size:11px; font-weight:700; }
   .theme-toggle:hover { border-color:var(--accent); }
   .save-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; position:sticky; bottom:0; margin-top:16px; padding:14px 16px; background:var(--card); border:1px solid var(--line); border-radius:8px; box-shadow:0 -6px 20px rgba(0,0,0,0.18); z-index:5; }
   .save-status { font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; }
@@ -302,6 +317,9 @@
     .lb-table th, .lb-table td { padding:10px 8px; font-size:13px; }
     .lb-rank { font-size:19px; width:40px; }
     .lb-table td.lb-total { font-size:22px; }
+    .fdr-nm-full { display:none; }
+    .fdr-nm-short { display:inline; }
+    .fdr-th-team, .fdr-td-team { min-width:84px; }
   }
 </style>
 </head>
@@ -500,6 +518,20 @@ async function fplLive(gw, force) {
     console.warn('fplLive failed', e);
     return cached ? cached.data : {};
   }
+}
+// All season fixtures (with FPL difficulty) for the FDR grid. Cached ~30 min.
+async function fplAllFixtures(force) {
+  const cacheKey = 'pp_fpl_allfx';
+  const cached = parseStored(localStorage.getItem(cacheKey));
+  if (!force && cached && (Date.now() - cached._t) < 30 * 60 * 1000) return cached.data;
+  try {
+    const r = await fetch(`${API_FPL}?resource=fixtures`);
+    if (!r.ok) throw new Error('allfx ' + r.status);
+    const d = await r.json();
+    const data = d.fixtures || [];
+    try { localStorage.setItem(cacheKey, JSON.stringify({ _t: Date.now(), data })); } catch {}
+    return data;
+  } catch (e) { console.warn('fplAllFixtures failed', e); return cached ? cached.data : []; }
 }
 
 // ============================================================
@@ -1452,7 +1484,117 @@ function TeamBadge({ short, code, boot, size, className }) {
   return <img className={"tbadge " + (className || "")} src={url} alt={short || ""} width={s} height={s} onError={()=>setErr(true)} />;
 }
 
+function fdrColor(d) {
+  const map = {
+    1: { bg:'#0b7a3b', fg:'#eafff2' },
+    2: { bg:'#12d670', fg:'#06331c' },
+    3: { bg:'#d9d9e0', fg:'#23232b' },
+    4: { bg:'#ff2e6e', fg:'#ffffff' },
+    5: { bg:'#7d0b31', fg:'#ffe9f0' },
+  };
+  return map[d] || { bg:'var(--bg-2)', fg:'var(--ink-mute)' };
+}
+// Build { byTeam: {short:{gw:[{opp,ha,diff}]}}, gwDate:{gw:ms} } from all season fixtures.
+function buildFdrRows(teams, allFixtures) {
+  const byTeam = {}; (teams || []).forEach(t => byTeam[t.short] = {});
+  const gwDate = {};
+  (allFixtures || []).forEach(f => {
+    if (!f.gw) return;
+    if (f.kickoff) { const t = new Date(f.kickoff).getTime(); if (!isNaN(t) && (!gwDate[f.gw] || t < gwDate[f.gw])) gwDate[f.gw] = t; }
+    if (byTeam[f.teamH]) (byTeam[f.teamH][f.gw] = byTeam[f.teamH][f.gw] || []).push({ opp: f.teamA, ha: "H", diff: f.hDiff });
+    if (byTeam[f.teamA]) (byTeam[f.teamA][f.gw] = byTeam[f.teamA][f.gw] || []).push({ opp: f.teamH, ha: "A", diff: f.aDiff });
+  });
+  return { byTeam, gwDate };
+}
+
 function FixturesView({ state, fpl }) {
+  const [mode, setMode] = useState("fdr");
+  return (
+    <div>
+      <div className="page-head">
+        <div className="eyebrow">FIXTURES & DIFFICULTY</div>
+        <h1 className="page-title">Match <span className="it">week.</span></h1>
+        <p className="page-sub">See the fixture difficulty run for every club (FDR), or browse the exact matches week by week.</p>
+      </div>
+      <div className="nav" style={{ marginBottom: 20 }}>
+        <button className={mode==="fdr"?"active":""} onClick={()=>setMode("fdr")}>FDR</button>
+        <button className={mode==="fixtures"?"active":""} onClick={()=>setMode("fixtures")}>Fixtures</button>
+      </div>
+      {mode==="fdr" ? <FdrGrid state={state} fpl={fpl} /> : <FixturesByWeek state={state} fpl={fpl} />}
+    </div>
+  );
+}
+
+function FdrGrid({ state, fpl }) {
+  const boot = fpl.boot;
+  const [all, setAll] = useState(null);
+  const [sortDir, setSortDir] = useState("asc");
+  const scrollRef = useRef(null);
+  useEffect(() => {
+    let alive = true;
+    fplAllFixtures().then(fx => { if (alive) setAll(fx || []); }).catch(() => { if (alive) setAll([]); });
+    return () => { alive = false; };
+  }, []);
+  const scrollBy = (dx) => { if (scrollRef.current) scrollRef.current.scrollBy({ left: dx, behavior: 'smooth' }); };
+
+  if (!boot || !boot.teams) return <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>⚠️ Couldn't load FPL data. The FDR grid works once deployed on Vercel; if you're live, hit Refresh on the Home tab.</div>;
+  if (all === null) return <div className="empty-mini">Loading fixture difficulty…</div>;
+  if (all.length === 0) return <div className="empty"><div className="empty-title">NO FIXTURES YET</div><p>Fixture difficulty appears once the FPL schedule is published.</p></div>;
+
+  const teams = Object.values(boot.teams).slice().sort((a,b) => sortDir==="asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
+  const gws = Array.from({ length: TOTAL_GW }, (_,i) => i+1);
+  const { byTeam, gwDate } = buildFdrRows(teams, all);
+
+  return (
+    <div>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap', marginBottom:14 }}>
+        <div className="fdr-key">
+          <span className="fdr-key-lbl">FDR</span>
+          {[1,2,3,4,5].map(d => { const c = fdrColor(d); return <span key={d} className="fdr-key-box" style={{ background:c.bg, color:c.fg }}>{d}</span>; })}
+          <span className="fdr-key-ends">easy → hard</span>
+        </div>
+        <div style={{ display:'flex', gap:8 }}>
+          <button className="btn btn-sm btn-ghost" onClick={()=>scrollBy(-340)}>‹ Prev</button>
+          <button className="btn btn-sm btn-ghost" onClick={()=>scrollBy(340)}>Next ›</button>
+        </div>
+      </div>
+      <div className="card" style={{ padding:0, overflow:'hidden' }}>
+        <div className="fdr-wrap" ref={scrollRef}>
+          <table className="fdr-table">
+            <thead>
+              <tr>
+                <th className="fdr-th-team" onClick={()=>setSortDir(d=>d==="asc"?"desc":"asc")} title="Sort by team name">Team {sortDir==="asc"?"▲":"▼"}</th>
+                {gws.map(g => (
+                  <th key={g} className="fdr-th">GW{g}<div className="fdr-th-date">{gwDate[g] ? new Date(gwDate[g]).toLocaleDateString(undefined,{month:'short',day:'numeric'}) : ""}</div></th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {teams.map(t => (
+                <tr key={t.id}>
+                  <td className="fdr-td-team"><div className="fdr-team-inner"><TeamBadge short={t.short} code={t.code} boot={boot} size={22} /><span className="fdr-tn"><span className="fdr-nm-full">{t.name}</span><span className="fdr-nm-short">{t.short}</span></span></div></td>
+                  {gws.map(g => {
+                    const arr = (byTeam[t.short] && byTeam[t.short][g]) || [];
+                    return (
+                      <td key={g} className="fdr-td">
+                        {arr.length === 0
+                          ? <div className="fdr-blank">—</div>
+                          : arr.map((x,i) => { const c = fdrColor(x.diff); return <div key={i} className="fdr-chip" style={{ background:c.bg, color:c.fg }}>{x.opp} ({x.ha})</div>; })}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p className="helper" style={{ marginTop:12 }}>Colour = FPL fixture difficulty from that club's perspective (1 easiest, 5 hardest). Swipe sideways or use Prev / Next to see more weeks. Tap "Team" to flip the order. Handy for planning team of the week, survivor and the Fantastic Four.</p>
+    </div>
+  );
+}
+
+function FixturesByWeek({ state, fpl }) {
   const boot = fpl.boot;
   const [selGW, setSelGW] = useState(state.activeGW || 1);
   const [extra, setExtra] = useState({});
@@ -1476,13 +1618,8 @@ function FixturesView({ state, fpl }) {
   });
   return (
     <div>
-      <div className="page-head">
-        <div className="eyebrow">FIXTURES · GAMEWEEK {selGW}</div>
-        <h1 className="page-title">Match <span className="it">week.</span></h1>
-        <p className="page-sub">Browse any gameweek — use it to plan your team of the week and survivor pick.</p>
-      </div>
       <div className="card" style={{ marginBottom:20, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
-        <span style={{ fontFamily:'JetBrains Mono', fontSize:12, letterSpacing:'0.1em', color:'var(--ink-mute)' }}>GAMEWEEK</span>
+        <span style={{ fontFamily:'JetBrains Mono', fontSize:12, letterSpacing:'0.1em', color:'var(--ink-mute)' }}>GAMEWEEK {selGW}</span>
         <button className="btn btn-sm" onClick={()=>setSelGW(g => Math.max(1, g-1))}>−</button>
         <select value={selGW} onChange={e=>setSelGW(parseInt(e.target.value,10))} style={{ background:'var(--bg-2)', border:'1px solid var(--line)', color:'var(--ink)', padding:'8px 12px', borderRadius:4, fontWeight:600 }}>
           {Array.from({length: TOTAL_GW}, (_,i)=>i+1).map(g => <option key={g} value={g}>Gameweek {g}{g===(state.activeGW||1) ? " · current" : ""}</option>)}
@@ -1513,6 +1650,7 @@ function FixturesView({ state, fpl }) {
     </div>
   );
 }
+
 function playersByTeamPos(players) {
   const out = {};
   Object.values(players || {}).forEach(p => {
