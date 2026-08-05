@@ -49,6 +49,22 @@
   .bb-btn .bb-lbl { max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .bb-btn:hover { color:var(--ink); }
   .bb-btn.active { color:var(--accent); background:rgba(233,0,82,0.10); }
+  .lb-compact th, .lb-compact td { padding:11px 12px; }
+  .lb-move { font-family:'JetBrains Mono', monospace; font-size:11px; font-weight:700; }
+  .lb-move.up { color:var(--accent-2); }
+  .lb-move.down { color:var(--red); }
+  .lb-move.same { color:var(--ink-mute); }
+  .lb-move.new { color:var(--purple); }
+  .lb-move-cell { text-align:center; width:38px; }
+  .lb-detail { background:var(--bg-2); }
+  .lb-detail-sections { font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--ink-dim); margin-bottom:10px; }
+  .lb-detail-sections strong { color:var(--ink); }
+  .lb-week { width:100%; border-collapse:collapse; }
+  .lb-week th { font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:0.05em; color:var(--ink-mute); text-transform:uppercase; text-align:right; padding:6px 8px; border-bottom:1px solid var(--line); }
+  .lb-week th:first-child { text-align:left; }
+  .lb-week td { font-family:'JetBrains Mono', monospace; font-size:12px; text-align:right; padding:6px 8px; border-bottom:1px solid var(--line); color:var(--ink-dim); }
+  .lb-week td:first-child { text-align:left; color:var(--ink); font-weight:700; }
+  .lb-week-tot { color:var(--accent) !important; font-weight:700; }
   .fdr-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
   .fdr-table { border-collapse:separate; border-spacing:0; width:auto; }
   .fdr-th, .fdr-th-team { font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:0.06em; color:var(--ink-mute); text-transform:uppercase; font-weight:500; padding:10px 8px; text-align:center; white-space:nowrap; border-bottom:1px solid var(--line); background:var(--card); }
@@ -321,6 +337,22 @@
     .fdr-nm-short { display:inline; }
     .fdr-th-team, .fdr-td-team { min-width:84px; }
   }
+
+  /* ---------------- extra colour ---------------- */
+  .top { border-bottom:2px solid var(--line); border-image: linear-gradient(90deg, #e90052, #963cff, #00c2ff, #00ff87) 1; }
+  .page-title .it { background: linear-gradient(90deg, var(--accent), var(--purple)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; }
+  .card-title { border-left:3px solid var(--accent); padding-left:11px; }
+  .btn-primary { background-image: linear-gradient(135deg, #e90052, #ff2e6e); border-color:transparent; }
+  .quick-nav .qn-btn:nth-child(4n+1) { border-left:3px solid var(--accent); }
+  .quick-nav .qn-btn:nth-child(4n+2) { border-left:3px solid var(--cyan, #00c2ff); }
+  .quick-nav .qn-btn:nth-child(4n+3) { border-left:3px solid var(--purple); }
+  .quick-nav .qn-btn:nth-child(4n+4) { border-left:3px solid var(--yellow); }
+  .quick-nav .qn-btn:hover { background:var(--card-2); }
+  .stat-row .stat:nth-child(4n+1) { border-top:3px solid var(--accent); }
+  .stat-row .stat:nth-child(4n+2) { border-top:3px solid var(--accent-2); }
+  .stat-row .stat:nth-child(4n+3) { border-top:3px solid var(--purple); }
+  .stat-row .stat:nth-child(4n+4) { border-top:3px solid var(--cyan, #00c2ff); }
+  .eyebrow { background: linear-gradient(90deg, var(--accent), var(--purple)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; }
 </style>
 </head>
 <body>
@@ -568,7 +600,7 @@ function defaultState() {
     selectedFixtures: {},   // { [gw]: [fixtureId,...] } which fixtures count for score predictions
     scoring: DEFAULT_SCORING,
     bonus: {},
-    survivorEnabled: true,
+    survivorEnabled: false,   // survivor game removed
     _v: 1,
   };
 }
@@ -695,11 +727,11 @@ function gwLocked(state, fpl, gw, now) {
 //   fpl = { fixturesByGW: {gw:[fx]}, liveByGW: {gw:{id:pts}} }
 //   Scores gameweeks 1..activeGW (unfinished fixtures naturally score 0).
 // ============================================================
-function computeUserSeason(pred, state, fpl) {
+function computeUserSeason(pred, state, fpl, maxGWOverride) {
   const cfg = state.scoring || DEFAULT_SCORING;
   const bd = { scores: 0, team: 0, f4: 0, bonus: 0 };
   const perGW = {};
-  const maxGW = state.activeGW || 1;
+  const maxGW = (maxGWOverride != null) ? maxGWOverride : (state.activeGW || 1);
   // chronological team usage
   const teamCount = {};
   for (let gw = 1; gw <= maxGW; gw++) {
@@ -737,9 +769,9 @@ function computeUserSeason(pred, state, fpl) {
   const total = bd.scores + bd.team + bd.f4 + bd.bonus;
   return { name: pred.name, total, breakdown: bd, perGW };
 }
-function computeStandings(users, state, fpl) {
+function computeStandings(users, state, fpl, maxGWOverride) {
   return (users || [])
-    .map(u => computeUserSeason(u, state, fpl))
+    .map(u => computeUserSeason(u, state, fpl, maxGWOverride))
     .sort((a, b) => b.total - a.total);
 }
 
@@ -839,7 +871,7 @@ function App() {
     if (!s.locks) { s.locks = {}; save = true; }
     if (!s.selectedFixtures) { s.selectedFixtures = {}; save = true; }
     if (!s.bonus) { s.bonus = {}; save = true; }
-    if (s.survivorEnabled === undefined) { s.survivorEnabled = true; save = true; }
+    if (s.survivorEnabled !== false) { s.survivorEnabled = false; save = true; }
     if (!s.activeGW) { s.activeGW = 1; save = true; }
     if (!s.openGWs || !s.openGWs.length) { s.openGWs = [s.activeGW || 1]; save = true; }
     if (save && apiReady) await setShared("pp_state", s);
@@ -1405,12 +1437,7 @@ function RulesView({ state }) {
           <p className="helper" style={{ marginTop:10 }}>Defender & midfielder: usable <strong>once</strong> all season. Goalkeeper & forward: <strong>twice</strong>, but once in GW1-{HALF_SPLIT} and once in GW{HALF_SPLIT+1}-{TOTAL_GW}. Used players drop out of the menus automatically.</p>
         </div>
       </div>
-      <div className="grid grid-2" style={{ marginTop:18 }}>
-        <div className="card">
-          <div className="card-title">Survivor</div>
-          <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>A last-man-standing side game. Each gameweek, pick one team to <strong style={{color:'var(--ink)'}}>win</strong>. A draw or loss knocks you out — and you can <strong>never reuse a team</strong>. Last pundit standing takes it.</p>
-          <p className="helper" style={{ marginTop:10 }}>Miss a pick on a locked gameweek and you're out too. See who's still standing on Leaderboard → Survivor.</p>
-        </div>
+      <div style={{ marginTop:18 }}>
         <div className="card">
           <div className="card-title">Bonus Questions</div>
           <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Some gameweeks the admin posts a few bonus questions — yes/no or multiple choice. Answer before the deadline; points land once the admin settles the correct answer.</p>
@@ -1706,7 +1733,7 @@ function PredictView({ state, myPred, users, fpl, updateMyPred, showToast, tab, 
       {tab==="team" && <TeamTab state={state} gw={gw} locked={locked} fixtures={fixtures} boot={boot} fpl={fpl} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
       {tab==="f4" && <F4Tab state={state} gw={gw} locked={locked} live={live} boot={boot} fixtures={fixtures} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
       {tab==="survivor" && <SurvivorTab state={state} gw={gw} locked={locked} fixtures={fixtures} myPred={myPred} fpl={fpl} updateMyPred={updateMyPred} showToast={showToast} />}
-      {tab==="bonus" && <BonusTab state={state} gw={gw} locked={locked} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
+      {tab==="bonus" && <BonusTab state={state} gw={gw} locked={locked} myPred={myPred} fpl={fpl} updateMyPred={updateMyPred} showToast={showToast} />}
     </div>
   );
 }
@@ -2125,13 +2152,17 @@ function SurvivorTab({ state, gw, locked, fixtures, myPred, fpl, updateMyPred, s
   );
 }
 
-function BonusTab({ state, gw, locked, myPred, updateMyPred, showToast }) {
+function BonusTab({ state, gw, locked, myPred, fpl, updateMyPred, showToast }) {
+  const boot = fpl && fpl.boot;
   const questions = (state.bonus && state.bonus[gw]) || [];
   const answers = (myPred.bonusAnswers && myPred.bonusAnswers[gw]) || {};
   const setAns = (qid, val) => {
     if (locked) { showToast("Gameweek locked"); return; }
     updateMyPred(p => ({ ...p, bonusAnswers: { ...p.bonusAnswers, [gw]: { ...(p.bonusAnswers && p.bonusAnswers[gw]), [qid]: val } } }));
   };
+  const teamOpts = (boot && boot.teams) ? Object.values(boot.teams).slice().sort((a,b)=>a.name.localeCompare(b.name)) : [];
+  const playerOpts = (boot && boot.players) ? Object.values(boot.players).map(pl => pl.name + " (" + pl.teamShort + ")").sort((a,b)=>a.localeCompare(b)) : [];
+  const fieldStyle = { marginTop:12, width:'100%', background:'var(--bg-2)', border:'1px solid var(--line)', color:'var(--ink)', padding:'11px 12px', borderRadius:6 };
   if (!questions.length) return <div className="empty"><div className="empty-title">NO BONUS QUESTIONS</div><p>The admin hasn't posted any bonus questions for GW{gw} yet.</p></div>;
   return (
     <div>
@@ -2140,20 +2171,32 @@ function BonusTab({ state, gw, locked, myPred, updateMyPred, showToast }) {
         const ans = answers[q.id];
         const settled = q.answer !== undefined && q.answer !== null && q.answer !== "";
         const correct = settled && ans != null && String(ans) === String(q.answer);
+        const type = q.type || (q.options && q.options.length ? "choice" : "text");
+        const chips = type==="yesno" ? ["Yes","No"] : (q.options || []);
         return (
           <div key={q.id} className="card" style={{ marginBottom:12 }}>
             <div style={{ display:'flex', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
               <div style={{ fontWeight:600, fontSize:15 }}>{q.text}</div>
               <div style={{ fontFamily:'Anton', color:'var(--accent)', fontSize:18 }}>{q.points} pt{q.points===1?"":"s"}</div>
             </div>
-            {q.options && q.options.length ? (
+            {(type==="yesno" || type==="choice") ? (
               <div className="team-grid" style={{ marginTop:12 }}>
-                {q.options.map(opt => (
+                {chips.map(opt => (
                   <div key={opt} className={"team-chip" + (String(ans)===String(opt)?" selected":"")} onClick={()=>setAns(q.id, opt)} style={{ cursor: locked?'not-allowed':'pointer' }}>{opt}</div>
                 ))}
               </div>
+            ) : type==="team" ? (
+              <select value={ans||""} disabled={locked} onChange={e=>setAns(q.id, e.target.value)} style={fieldStyle}>
+                <option value="">— pick a team —</option>
+                {teamOpts.map(t => <option key={t.id} value={t.short}>{t.name}</option>)}
+              </select>
+            ) : type==="player" ? (
+              <React.Fragment>
+                <input list={"plbon-"+q.id} value={ans||""} disabled={locked} onChange={e=>setAns(q.id, e.target.value)} placeholder="Start typing a player…" style={fieldStyle} />
+                <datalist id={"plbon-"+q.id}>{playerOpts.map(o => <option key={o} value={o} />)}</datalist>
+              </React.Fragment>
             ) : (
-              <input style={{ marginTop:12, width:'100%', background:'var(--bg-2)', border:'1px solid var(--line)', color:'var(--ink)', padding:'10px 12px', borderRadius:3 }} placeholder="Type your answer" value={ans||""} disabled={locked} onChange={e=>setAns(q.id, e.target.value)} />
+              <input style={fieldStyle} placeholder="Type your answer" value={ans||""} disabled={locked} onChange={e=>setAns(q.id, e.target.value)} />
             )}
             {locked && settled && (
               <div className="fx-result" style={{ marginTop:12 }}>
@@ -2297,6 +2340,7 @@ function LeaderboardView({ standings, currentUser, state, users, fpl, fplBusy, o
   const overall = standings;
   const predictions = [...standings].sort((a,b) => (b.breakdown.scores + b.breakdown.team) - (a.breakdown.scores + a.breakdown.team));
   const f4board = [...standings].sort((a,b) => b.breakdown.f4 - a.breakdown.f4);
+  const prev = (state.activeGW||1) > 1 ? computeStandings(users, state, fpl, (state.activeGW||1) - 1) : [];
   const survivors = (state.survivorEnabled && users) ? computeSurvivorStandings(users, state, fpl) : [];
 
   return (
@@ -2318,7 +2362,7 @@ function LeaderboardView({ standings, currentUser, state, users, fpl, fplBusy, o
 
       {board==="survivor"
         ? <SurvivorBoard survivors={survivors} currentUser={currentUser} />
-        : <LeaderTable rows={board==="overall"?overall:board==="predictions"?predictions:f4board} mode={board} currentUser={currentUser} expanded={expanded} setExpanded={setExpanded} />}
+        : <LeaderTable rows={board==="overall"?overall:board==="predictions"?predictions:f4board} prev={prev} mode={board} currentUser={currentUser} expanded={expanded} setExpanded={setExpanded} />}
 
       <p className="helper" style={{ marginTop:14 }}>
         {board==="overall" && "Everything combined: score predictions + team of the week + Fantastic Four + bonus questions. Tap a row for the gameweek split."}
@@ -2330,46 +2374,50 @@ function LeaderboardView({ standings, currentUser, state, users, fpl, fplBusy, o
   );
 }
 
-function LeaderTable({ rows, mode, currentUser, expanded, setExpanded }) {
+function LeaderTable({ rows, prev, mode, currentUser, expanded, setExpanded }) {
   if (!rows.length) return <div className="empty"><div className="empty-title">NO POINTS YET</div><p>Once results land, the table fills in here.</p></div>;
   const rankClass = i => "lb-rank" + (i===0?" gold":i===1?" silver":i===2?" bronze":"");
-  const val = (s) => mode==="overall" ? s.total : mode==="predictions" ? (s.breakdown.scores + s.breakdown.team) : s.breakdown.f4;
-  const gwVal = (v) => mode==="overall" ? v.total : mode==="predictions" ? (v.scores + v.team) : v.f4;
-  const cols = mode==="overall" ? 7 : mode==="predictions" ? 5 : 4;
+  const valOf = (s) => mode==="overall" ? s.total : mode==="predictions" ? (s.breakdown.scores + s.breakdown.team) : s.breakdown.f4;
+  const label = mode==="overall" ? "Total" : mode==="predictions" ? "Combined" : "Points";
+  const prevSorted = (prev || []).slice().sort((a,b) => valOf(b) - valOf(a));
+  const prevRank = {}; prevSorted.forEach((s,i) => { prevRank[s.name] = i+1; });
+  const hasPrev = prevSorted.length > 0;
+  const move = (name, rank) => {
+    const pr = prevRank[name];
+    if (!hasPrev || pr == null) return <span className="lb-move new" title="new this week">•</span>;
+    const d = pr - rank;
+    if (d > 0) return <span className="lb-move up" title={"up "+d}>▲{d}</span>;
+    if (d < 0) return <span className="lb-move down" title={"down "+(-d)}>▼{-d}</span>;
+    return <span className="lb-move same" title="no change">–</span>;
+  };
   return (
     <div className="card" style={{ overflowX:'auto', padding:0 }}>
-      <table className="lb-table" style={{ minWidth:640 }}>
+      <table className="lb-table lb-compact" style={{ minWidth:360 }}>
         <thead><tr>
-          <th>#</th><th>Pundit</th>
-          {mode!=="f4" && <th style={{textAlign:'right'}}>Scores</th>}
-          {mode!=="f4" && <th style={{textAlign:'right'}}>Team</th>}
-          {mode==="overall" && <th style={{textAlign:'right'}}>F4</th>}
-          {mode==="overall" && <th style={{textAlign:'right'}}>Bonus</th>}
-          {mode==="f4" && <th style={{textAlign:'right'}}>F4 pts</th>}
-          <th style={{textAlign:'right'}}>{mode==="overall"?"Total":mode==="predictions"?"Combined":"Points"}</th>
+          <th>#</th><th></th><th>Pundit</th><th style={{textAlign:'right'}}>{label}</th>
         </tr></thead>
         <tbody>
           {rows.map((s, i) => (
             <React.Fragment key={s.name}>
               <tr onClick={()=>setExpanded(expanded===s.name?null:s.name)} style={{ cursor:'pointer' }}>
                 <td className={rankClass(i)}>{i+1}</td>
-                <td style={{ fontWeight:600 }}>{s.name}{s.name===currentUser?<span style={{color:'var(--accent-2)'}}> · you</span>:""}</td>
-                {mode!=="f4" && <td style={{textAlign:'right', fontFamily:'JetBrains Mono'}}>{s.breakdown.scores}</td>}
-                {mode!=="f4" && <td style={{textAlign:'right', fontFamily:'JetBrains Mono'}}>{s.breakdown.team}</td>}
-                {mode==="overall" && <td style={{textAlign:'right', fontFamily:'JetBrains Mono'}}>{s.breakdown.f4}</td>}
-                {mode==="overall" && <td style={{textAlign:'right', fontFamily:'JetBrains Mono'}}>{s.breakdown.bonus||0}</td>}
-                {mode==="f4" && <td style={{textAlign:'right', fontFamily:'JetBrains Mono'}}>{s.breakdown.f4}</td>}
-                <td className="lb-total">{val(s)}</td>
+                <td className="lb-move-cell">{move(s.name, i+1)}</td>
+                <td style={{ fontWeight:600 }}>{s.name}{s.name===currentUser?<span style={{color:'var(--accent-2)'}}> · you</span>:""} <span style={{ color:'var(--ink-mute)', fontSize:11 }}>{expanded===s.name?"▾":"▸"}</span></td>
+                <td className="lb-total">{valOf(s)}</td>
               </tr>
               {expanded===s.name && (
-                <tr><td colSpan={cols} style={{ background:'var(--bg-2)' }}>
-                  <div style={{ padding:'6px 4px' }}>
+                <tr><td colSpan={4} className="lb-detail">
+                  <div style={{ padding:'10px 12px' }}>
+                    <div className="lb-detail-sections">Scores <strong>{s.breakdown.scores}</strong> · Team <strong>{s.breakdown.team}</strong> · F4 <strong>{s.breakdown.f4}</strong> · Bonus <strong>{s.breakdown.bonus||0}</strong></div>
                     {Object.keys(s.perGW).length === 0 ? <div className="empty-mini">No scored gameweeks yet.</div> : (
-                      <div className="lb-breakdown">
-                        {Object.entries(s.perGW).sort((a,b)=>parseInt(a[0])-parseInt(b[0])).map(([g,v]) => (
-                          <span key={g}>GW{g}<strong>{gwVal(v)}</strong></span>
-                        ))}
-                      </div>
+                      <table className="lb-week">
+                        <thead><tr><th>GW</th><th>Scores</th><th>Team</th><th>F4</th><th>Bonus</th><th>Total</th></tr></thead>
+                        <tbody>
+                          {Object.entries(s.perGW).sort((a,b)=>parseInt(a[0])-parseInt(b[0])).map(([g,v]) => (
+                            <tr key={g}><td>GW{g}</td><td>{v.scores}</td><td>{v.team}</td><td>{v.f4}</td><td>{v.bonus}</td><td className="lb-week-tot">{v.total}</td></tr>
+                          ))}
+                        </tbody>
+                      </table>
                     )}
                   </div>
                 </td></tr>
@@ -2530,7 +2578,7 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
   const [fxGW, setFxGW] = useState(activeGW);
   const fixtures = (fpl.fixturesByGW && fpl.fixturesByGW[fxGW]) || [];
   const selIds = (state.selectedFixtures && state.selectedFixtures[fxGW]) || [];
-  const [newQ, setNewQ] = useState({ text: "", options: "", points: 3 });
+  const [newQ, setNewQ] = useState({ text: "", options: "", points: 3, type: "text" });
   const [pwInputs, setPwInputs] = useState({});
   const [newUser, setNewUser] = useState({ name: "", pw: "" });
   const namedUsers = (users || []).filter(u => u.name).sort((a,b)=>a.name.localeCompare(b.name));
@@ -2553,11 +2601,15 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
     else showToast((r && r.msg) || "Couldn't add pundit");
   };
   const bonusList = (state.bonus && state.bonus[activeGW]) || [];
+  const bonusTeamOpts = (boot && boot.teams) ? Object.values(boot.teams).slice().sort((a,b)=>a.name.localeCompare(b.name)) : [];
+  const bonusPlayerOpts = (boot && boot.players) ? Object.values(boot.players).map(pl => pl.name + " (" + pl.teamShort + ")").sort((a,b)=>a.localeCompare(b)) : [];
   const addBonus = () => {
     if (!newQ.text.trim()) { showToast("Enter a question first"); return; }
-    const q = { id: "q" + Date.now().toString(36), text: newQ.text.trim(), options: newQ.options.split(",").map(x=>x.trim()).filter(Boolean), answer: "", points: Number(newQ.points)||1 };
+    const bt = newQ.type || "text";
+    const opts = bt==="yesno" ? ["Yes","No"] : bt==="choice" ? newQ.options.split(",").map(x=>x.trim()).filter(Boolean) : [];
+    const q = { id: "q" + Date.now().toString(36), text: newQ.text.trim(), type: bt, options: opts, answer: "", points: Number(newQ.points)||1 };
     updateState(st => ({ ...st, bonus: { ...(st.bonus||{}), [activeGW]: [ ...(((st.bonus||{})[activeGW])||[]), q ] } }));
-    setNewQ({ text: "", options: "", points: 3 });
+    setNewQ({ text: "", options: "", points: 3, type: "text" });
   };
   const setBonusAnswer = (qid, ans) => updateState(st => ({ ...st, bonus: { ...(st.bonus||{}), [activeGW]: (((st.bonus||{})[activeGW])||[]).map(q => q.id===qid ? { ...q, answer: ans } : q) } }));
   const delBonus = (qid) => updateState(st => ({ ...st, bonus: { ...(st.bonus||{}), [activeGW]: (((st.bonus||{})[activeGW])||[]).filter(q => q.id!==qid) } }));
@@ -2718,14 +2770,26 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
             </div>
             <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
               <span style={{ fontSize:12, color:'var(--ink-mute)' }}>Correct answer:</span>
-              {q.options && q.options.length ? (
-                <select value={q.answer||""} onChange={e=>setBonusAnswer(q.id, e.target.value)} style={{ background:'var(--bg-2)', border:'1px solid var(--line)', color:'var(--ink)', padding:'7px 10px', borderRadius:3 }}>
-                  <option value="">— not settled —</option>
-                  {q.options.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-              ) : (
-                <input value={q.answer||""} onChange={e=>setBonusAnswer(q.id, e.target.value)} placeholder="type correct answer" style={{ background:'var(--bg-2)', border:'1px solid var(--line)', color:'var(--ink)', padding:'7px 10px', borderRadius:3 }} />
-              )}
+              {(() => {
+                const bt = q.type || (q.options && q.options.length ? "choice" : "text");
+                const ss = { background:'var(--bg-2)', border:'1px solid var(--line)', color:'var(--ink)', padding:'7px 10px', borderRadius:3 };
+                if (bt === "team") return (
+                  <select value={q.answer||""} onChange={e=>setBonusAnswer(q.id, e.target.value)} style={ss}>
+                    <option value="">— not settled —</option>
+                    {bonusTeamOpts.map(t => <option key={t.id} value={t.short}>{t.name}</option>)}
+                  </select>);
+                if (bt === "player") return (
+                  <React.Fragment>
+                    <input list={"pladm-"+q.id} value={q.answer||""} onChange={e=>setBonusAnswer(q.id, e.target.value)} placeholder="settle: pick player" style={ss} />
+                    <datalist id={"pladm-"+q.id}>{bonusPlayerOpts.map(o => <option key={o} value={o} />)}</datalist>
+                  </React.Fragment>);
+                if (q.options && q.options.length) return (
+                  <select value={q.answer||""} onChange={e=>setBonusAnswer(q.id, e.target.value)} style={ss}>
+                    <option value="">— not settled —</option>
+                    {q.options.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>);
+                return <input value={q.answer||""} onChange={e=>setBonusAnswer(q.id, e.target.value)} placeholder="type correct answer" style={ss} />;
+              })()}
               <button className="btn btn-danger btn-sm" onClick={()=>delBonus(q.id)}>Delete</button>
             </div>
           </div>
@@ -2733,16 +2797,19 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
         <div className="divider" style={{ margin:'16px 0' }}></div>
         <div className="grid grid-3">
           <div className="field" style={{ marginBottom:0 }}><label>Question</label><input value={newQ.text} onChange={e=>setNewQ({ ...newQ, text: e.target.value })} placeholder="e.g. Will there be a hat-trick?" /></div>
-          <div className="field" style={{ marginBottom:0 }}><label>Options (comma separated — blank = free text)</label><input value={newQ.options} onChange={e=>setNewQ({ ...newQ, options: e.target.value })} placeholder="Yes, No" /></div>
+          <div className="field" style={{ marginBottom:0 }}><label>Answer type</label>
+            <select value={newQ.type} onChange={e=>setNewQ({ ...newQ, type: e.target.value })} style={{ width:'100%', background:'var(--bg-2)', border:'1px solid var(--line)', color:'var(--ink)', padding:'10px 12px', borderRadius:6 }}>
+              <option value="text">Free text</option>
+              <option value="yesno">Yes / No</option>
+              <option value="choice">Multiple choice</option>
+              <option value="team">Team dropdown</option>
+              <option value="player">Player dropdown</option>
+            </select>
+          </div>
           <div className="field" style={{ marginBottom:0 }}><label>Points</label><input type="number" value={newQ.points} onChange={e=>setNewQ({ ...newQ, points: e.target.value })} /></div>
         </div>
+        {newQ.type==="choice" && <div className="field" style={{ marginTop:12, marginBottom:0 }}><label>Options (comma separated)</label><input value={newQ.options} onChange={e=>setNewQ({ ...newQ, options: e.target.value })} placeholder="e.g. Arsenal, Chelsea, Draw" /></div>}
         <button className="btn btn-primary btn-sm" style={{ marginTop:12 }} onClick={addBonus}>+ Add question</button>
-      </div>
-
-      <div className="card" style={{ marginTop:18 }}>
-        <div className="card-title">Survivor</div>
-        <p className="helper" style={{ marginBottom:12 }}>Last-man-standing side game: each pundit picks one team to win per GW, never repeating a team; a draw, loss, or missed pick knocks them out. Resolved automatically when you lock each gameweek.</p>
-        <button className={"btn btn-sm " + (state.survivorEnabled?"btn-go":"btn-ghost")} onClick={toggleSurvivor}>{state.survivorEnabled ? "✓ Survivor is ON — click to turn off" : "Survivor is OFF — click to turn on"}</button>
       </div>
 
       <div className="card" style={{ marginTop:18, borderColor:'rgba(255,77,77,0.3)' }}>
