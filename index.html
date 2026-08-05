@@ -2400,8 +2400,8 @@ function LeaderboardView({ standings, currentUser, state, users, fpl, fplBusy, o
       </div>
       <div className="nav" style={{ marginBottom:16 }}>
         <button className={board==="overall"?"active":""} onClick={()=>setBoard("overall")}>Overall</button>
-        <button className={board==="stb"?"active":""} onClick={()=>setBoard("stb")}>Scores + Team + Bonus</button>
-        <button className={board==="f4"?"active":""} onClick={()=>setBoard("f4")}>Fantastic Four</button>
+        <button className={board==="stb"?"active":""} onClick={()=>setBoard("stb")}>Scores + Team</button>
+        <button className={board==="f4"?"active":""} onClick={()=>setBoard("f4")}>Fantastic Four + Bonus</button>
       </div>
       <div className="lb-head-card">
         <div style={{ fontSize:14 }}>🏆 <strong>{potName}:</strong> <span style={{ color:'var(--ink-dim)' }}>{potDesc} {mode==="gw" ? ("GW"+gwSel+" only.") : "Season total."}</span></div>
