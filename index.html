@@ -2383,16 +2383,15 @@ function LeaderboardView({ standings, currentUser, state, users, fpl, fplBusy, o
   const comp = (s, useGW) => {
     const b = useGW ? ((s.perGW && s.perGW[gwSel]) || { scores:0, team:0, f4:0, bonus:0 })
                     : { scores:s.breakdown.scores, team:s.breakdown.team, f4:s.breakdown.f4, bonus:s.breakdown.bonus||0 };
-    const total = board==="overall" ? (b.scores+b.team+b.f4+b.bonus) : board==="stb" ? (b.scores+b.team+b.bonus) : b.f4;
+    const total = board==="overall" ? (b.scores+b.team+b.f4+b.bonus) : board==="stb" ? (b.scores+b.team) : (b.f4+b.bonus);
     return { ...b, total };
   };
   const rows = [...standings].sort((a,b) => comp(b, mode==="gw").total - comp(a, mode==="gw").total);
   const prevSorted = [...prev].sort((a,b) => comp(b,false).total - comp(a,false).total);
   const prevRank = {}; prevSorted.forEach((s,i) => { prevRank[s.name] = i+1; });
   const detailStanding = detail ? standings.find(s => s.name === detail) : null;
-  const potName = board==="overall" ? "Overall" : board==="stb" ? "Scores + Team + Bonus" : "Fantastic Four";
-  const potDesc = board==="overall" ? "Everything combined." : board==="stb" ? "Prize pot 1 — score predictions, team of the week & bonus questions." : "Prize pot 2 — Fantastic Four only.";
-
+  const potName = board==="overall" ? "Overall" : board==="stb" ? "Scores + Team" : "Fantastic Four + Bonus";
+  const potDesc = board==="overall" ? "Everything combined." : board==="stb" ? "Prize pot 1 — score predictions & team of the week." : "Prize pot 2 — Fantastic Four & bonus questions.";
   return (
     <div>
       <div className="page-head">
@@ -2438,8 +2437,8 @@ function LeaderRow({ s, i, v, delta, board, isYou, onClick }) {
   const rankColor = i===0 ? "var(--yellow)" : i===1 ? "#cfd0d4" : i===2 ? "#d4824a" : "var(--ink-mute)";
   const move = delta==null ? null : delta>0 ? { t:"▲ UP "+delta, c:"var(--accent-2)" } : delta<0 ? { t:"▼ DOWN "+(-delta), c:"var(--red)" } : { t:"— no change", c:"var(--ink-mute)" };
   const boxes = board==="overall" ? [["SCORES",v.scores],["TEAM",v.team],["F4",v.f4],["BONUS",v.bonus]]
-    : board==="stb" ? [["SCORES",v.scores],["TEAM",v.team],["BONUS",v.bonus]]
-    : [["F4",v.f4]];
+     : board==="stb" ? [["SCORES",v.scores],["TEAM",v.team]]
+    : [["F4",v.f4],["BONUS",v.bonus]];
   return (
     <div className="lb-row" onClick={onClick}>
       <div className="lb-row-rank" style={{ color:rankColor }}>{i>=3?"#":""}{i+1}</div>
