@@ -353,6 +353,64 @@
   .stat-row .stat:nth-child(4n+3) { border-top:3px solid var(--purple); }
   .stat-row .stat:nth-child(4n+4) { border-top:3px solid var(--cyan, #00c2ff); }
   .eyebrow { background: linear-gradient(90deg, var(--accent), var(--purple)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; }
+
+  /* ---------------- Fantastic Four pitch ---------------- */
+  .pitch { position:relative; display:flex; flex-direction:column; justify-content:space-around; align-items:center; gap:6px; padding:26px 12px 30px; border-radius:16px; overflow:hidden; min-height:540px;
+    background: repeating-linear-gradient(0deg, #0f7a43 0px, #0f7a43 54px, #0c6d3b 54px, #0c6d3b 108px);
+    border:2px solid rgba(255,255,255,0.18); box-shadow:inset 0 0 60px rgba(0,0,0,0.35); }
+  .pitch::before { content:''; position:absolute; left:7%; right:7%; top:50%; height:2px; background:rgba(255,255,255,0.35); }
+  .pitch::after { content:''; position:absolute; left:50%; top:50%; width:130px; height:130px; transform:translate(-50%,-50%); border:2px solid rgba(255,255,255,0.35); border-radius:50%; }
+  .pitch-box { position:absolute; left:50%; transform:translateX(-50%); width:56%; max-width:340px; height:76px; border:2px solid rgba(255,255,255,0.3); z-index:1; }
+  .pitch-box.top { top:-2px; border-top:none; }
+  .pitch-box.bottom { bottom:-2px; border-bottom:none; }
+  .pitch-slot { position:relative; z-index:2; display:flex; flex-direction:column; align-items:center; gap:5px; }
+  .pitch-node { width:66px; height:66px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.4); border:2px solid rgba(255,255,255,0.6); position:relative; transition:transform 0.06s, border-color 0.15s; box-shadow:0 4px 12px rgba(0,0,0,0.35); }
+  .pitch-node:hover:not(:disabled) { border-color:var(--accent-2); transform:scale(1.05); }
+  .pitch-node:disabled { cursor:default; opacity:0.9; }
+  .pitch-node.filled { background:#0b0b12; border-color:var(--accent-2); }
+  .pitch-plus { font-size:28px; font-weight:700; color:rgba(255,255,255,0.9); line-height:1; }
+  .pitch-pts { position:absolute; bottom:-8px; right:-8px; background:var(--accent-2); color:#04231a; font-family:'Anton', sans-serif; font-size:13px; min-width:24px; height:24px; border-radius:12px; display:flex; align-items:center; justify-content:center; padding:0 6px; border:2px solid #0c6d3b; }
+  .pitch-tag { background:#0b0b12; color:#fff; font-family:'JetBrains Mono', monospace; font-size:11px; font-weight:700; letter-spacing:0.06em; padding:3px 9px; border-radius:6px; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pitch-meta { font-size:11px; color:rgba(255,255,255,0.9); font-family:'JetBrains Mono', monospace; text-align:center; text-shadow:0 1px 2px rgba(0,0,0,0.5); }
+  .pitch-meta.muted { color:rgba(255,255,255,0.6); }
+  .pitch-clear { font-size:10px; color:#fff; text-decoration:underline; opacity:0.85; }
+  /* ---------------- Leaderboard cards ---------------- */
+  .lb-head-card { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:16px 18px; border:1px solid var(--line); border-radius:14px; background:linear-gradient(180deg, var(--card), var(--card-2)); margin-bottom:16px; }
+  .lb-modeseg { display:flex; gap:6px; align-items:center; }
+  .lb-modeseg button { font-family:'JetBrains Mono', monospace; font-size:11px; font-weight:700; letter-spacing:0.06em; padding:8px 15px; border-radius:999px; border:1px solid var(--line); color:var(--ink-mute); }
+  .lb-modeseg button.active { background:var(--accent-2); color:#04231a; border-color:transparent; }
+  .lb-modeseg select { background:var(--bg-2); border:1px solid var(--line); color:var(--ink); padding:7px 12px; border-radius:999px; font-weight:600; }
+  .lb-colhead-lbl { font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:0.12em; color:var(--ink-mute); text-transform:uppercase; }
+  .lb-row { display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:16px 18px; border:1px solid var(--line); border-radius:14px; background:var(--card); margin-bottom:12px; cursor:pointer; transition:border-color 0.15s, transform 0.05s; }
+  .lb-row:hover { border-color:var(--accent); }
+  .lb-row:active { transform:scale(0.995); }
+  .lb-row-rank { font-family:'Anton', sans-serif; font-size:42px; line-height:1; min-width:46px; text-align:center; }
+  .lb-row-name { flex:1; min-width:130px; }
+  .lb-row-mgr { font-family:'Anton', sans-serif; font-size:23px; letter-spacing:0.01em; }
+  .lb-row-move { font-family:'JetBrains Mono', monospace; font-size:11px; font-weight:700; margin-top:3px; letter-spacing:0.04em; }
+  .lb-row-stats { display:flex; gap:8px; }
+  .lb-statbox { background:var(--bg-2); border:1px solid var(--line); border-radius:9px; padding:8px 10px; text-align:center; min-width:52px; }
+  .lb-statbox.bonus { border-color:rgba(233,0,82,0.45); }
+  .lb-sb-l { font-family:'JetBrains Mono', monospace; font-size:9px; letter-spacing:0.06em; color:var(--ink-mute); }
+  .lb-sb-v { font-family:'Anton', sans-serif; font-size:20px; margin-top:2px; }
+  .lb-row-total { text-align:right; min-width:82px; }
+  .lb-tot-l { font-family:'JetBrains Mono', monospace; font-size:9px; letter-spacing:0.1em; color:var(--ink-mute); }
+  .lb-tot-v { font-family:'Anton', sans-serif; font-size:40px; color:var(--accent-2); line-height:1; }
+  /* player detail modal */
+  .pd-summary { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:18px; }
+  .pd-sum { background:var(--bg-2); border:1px solid var(--line); border-radius:10px; padding:12px 8px; text-align:center; }
+  .pd-sum-l { font-family:'JetBrains Mono', monospace; font-size:9px; letter-spacing:0.05em; color:var(--ink-mute); }
+  .pd-sum-v { font-family:'Anton', sans-serif; font-size:26px; margin-top:4px; }
+  .pd-hist-title { font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:var(--ink-mute); margin-bottom:8px; }
+  @media (max-width: 560px) {
+    .pitch { min-height:460px; }
+    .lb-row-rank { font-size:34px; min-width:38px; }
+    .lb-row-mgr { font-size:19px; }
+    .lb-tot-v { font-size:32px; }
+    .lb-statbox { min-width:46px; padding:7px 8px; }
+    .lb-sb-v { font-size:17px; }
+    .pd-summary { grid-template-columns:repeat(2,1fr); }
+  }
 </style>
 </head>
 <body>
@@ -1738,28 +1796,23 @@ function PredictView({ state, myPred, users, fpl, updateMyPred, showToast, tab, 
   );
 }
 
-function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, showToast, scoreDraft, setScoreDraft }) {
+function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, showToast }) {
   const sc = state.scoring || DEFAULT_SCORING;
   const selIds = (state.selectedFixtures && state.selectedFixtures[gw]) || [];
   const selected = selIds.map(id => fixtures.find(f => String(f.id) === String(id))).filter(Boolean);
-  const stored = (myPred.scores && myPred.scores[gw]) || {};
-  const draft = scoreDraft || {};
+  const preds = (myPred.scores && myPred.scores[gw]) || {};
   const fullName = (short, id) => (boot && boot.teams && boot.teams[id]) ? boot.teams[id].name : short;
 
+  // Auto-save on every keystroke (PANENKA-style — no save button).
   const setHalf = (fid, which, val) => {
     if (locked) { showToast("Gameweek locked"); return; }
     const v = val.replace(/[^0-9]/g, "").slice(0,2);
-    const cur = (draft[fid] || "").split("-");
+    const cur = (preds[fid] || "").split("-");
     const next = which === 0 ? `${v}-${cur[1]||""}` : `${cur[0]||""}-${v}`;
-    setScoreDraft(d => ({ ...(d||{}), [fid]: next }));
+    updateMyPred(p => ({ ...p, scores: { ...p.scores, [gw]: { ...(p.scores && p.scores[gw]), [fid]: next } } }));
   };
-  // Save (or update) a single match's prediction.
-  const saveOne = (fid) => {
-    if (locked) { showToast("Gameweek locked"); return; }
-    const already = !!(stored[fid]);
-    updateMyPred(p => ({ ...p, scores: { ...p.scores, [gw]: { ...(p.scores && p.scores[gw]), [fid]: (draft[fid] || "") } } }));
-    showToast(already ? "Updated ✓" : "Saved ✓");
-  };
+  const clearAll = () => { if (locked) { showToast("Gameweek locked"); return; } updateMyPred(p => ({ ...p, scores: { ...p.scores, [gw]: {} } })); showToast("All scores cleared"); };
+  const hasAny = selected.some(f => (preds[f.id] || "").replace("-","").trim() !== "");
 
   if (selected.length === 0) {
     return <div className="empty"><div className="empty-title">FIXTURES NOT SET</div><p>The admin hasn't selected this gameweek's score-prediction fixtures yet. Check back once they do.</p></div>;
@@ -1767,15 +1820,13 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
   return (
     <div>
       {locked && <div className="lock-banner">🔒 Score predictions for GW{gw} are locked.</div>}
-      <p className="helper" style={{ marginBottom:16 }}>Predict the exact scoreline, then hit Save on each match. Outcome = {sc.scoreOutcome} pt · exact = {sc.scoreExact} pts. Predict a total above {sc.gfThreshold} for a shot at the Goal Fest Bonus.</p>
+      <p className="helper" style={{ marginBottom:16 }}>Predict the exact scoreline — it saves automatically as you type. Outcome = {sc.scoreOutcome} pt · exact = {sc.scoreExact} pts. Predict a total above {sc.gfThreshold} for a shot at the Goal Fest Bonus.</p>
       {selected.map(f => {
-        const val = draft[f.id] || "";
+        const val = preds[f.id] || "";
         const parts = val.split("-");
         const p = parseScore(val);
         const gfEligible = p && (p[0]+p[1]) > sc.gfThreshold;
         const pts = locked ? scoreFixturePoints(val, f, sc) : null;
-        const saved = !!(stored[f.id]);
-        const matchDirty = (draft[f.id] || "") !== (stored[f.id] || "");
         return (
           <div key={f.id} className="fixture">
             <div className="fixture-head">
@@ -1785,9 +1836,9 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
             <div className="fixture-body">
               <div className="fx-team home" style={{ display:'flex', alignItems:'center', gap:8, justifyContent:'flex-end' }}><span className="fx-nm"><span className="nm-full">{fullName(f.teamH, f.teamHId)}</span><span className="nm-short">{f.teamH}</span></span><TeamBadge short={f.teamH} code={boot&&boot.teams&&boot.teams[f.teamHId]?boot.teams[f.teamHId].code:null} boot={boot} size={22} /></div>
               <div className="fx-score-in">
-                <input type="number" min="0" max="20" value={parts[0]||""} disabled={locked} placeholder="0" onChange={e=>setHalf(f.id,0,e.target.value)} />
+                <input type="number" min="0" max="20" value={parts[0]||""} disabled={locked} onChange={e=>setHalf(f.id,0,e.target.value)} />
                 <span className="fx-dash">–</span>
-                <input type="number" min="0" max="20" value={parts[1]||""} disabled={locked} placeholder="0" onChange={e=>setHalf(f.id,1,e.target.value)} />
+                <input type="number" min="0" max="20" value={parts[1]||""} disabled={locked} onChange={e=>setHalf(f.id,1,e.target.value)} />
               </div>
               <div className="fx-team" style={{ display:'flex', alignItems:'center', gap:8, justifyContent:'flex-start' }}><TeamBadge short={f.teamA} code={boot&&boot.teams&&boot.teams[f.teamAId]?boot.teams[f.teamAId].code:null} boot={boot} size={22} /><span className="fx-nm"><span className="nm-full">{fullName(f.teamA, f.teamAId)}</span><span className="nm-short">{f.teamA}</span></span></div>
             </div>
@@ -1797,17 +1848,14 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
                 {locked ? <span className="pts">+{pts} pts</span> : <span>picks locked to score</span>}
               </div>
             )}
-            {!locked && (
-              <div className="fx-save">
-                <span className="save-status" style={{ color: matchDirty ? 'var(--accent)' : (saved ? 'var(--accent-2)' : 'var(--ink-mute)') }}>
-                  {matchDirty ? "● Unsaved" : saved ? "✓ Saved!" : "Not saved yet"}
-                </span>
-                <button className="btn btn-primary btn-sm" onClick={()=>saveOne(f.id)} disabled={!matchDirty}>{saved ? "Update" : "Save"}</button>
-              </div>
-            )}
           </div>
         );
       })}
+      {!locked && hasAny && (
+        <div style={{ marginTop:8 }}>
+          <button className="btn btn-ghost btn-sm" onClick={clearAll}>✕ Clear all scores</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1857,7 +1905,7 @@ function TeamTab({ state, gw, locked, fixtures, boot, fpl, myPred, updateMyPred,
           const total = teamUsesTotal(myPred.teamPick, t) - ((pick && pick.team===t)?1:0);
           const sel = pick && pick.team === t;
           return (
-            <div key={t} className={"team-chip" + (sel?" selected":"") + (total>=sc.teamMaxUses?" used2":"")} onClick={()=>choose(t)} style={{ cursor: locked?'not-allowed':'pointer' }} title={fullName(t)}>
+            <div key={t} className={"team-chip" + (sel?" selected":"")} onClick={()=>choose(t)} style={{ cursor: locked?'not-allowed':'pointer' }} title={fullName(t)}>
               <TeamBadge short={t} boot={boot} size={26} className="chip-badge" />
               {t}
               <span className="uses">{opponentsInGW(fixtures, t).join(" · ")}</span>
@@ -1925,28 +1973,31 @@ function F4Tab({ state, gw, locked, live, boot, fixtures, myPred, updateMyPred, 
   const sum = f4Points(f4, live, sc);
   const hasAny = POSITIONS.some(pos => f4[slotKey[pos]]);
   const clearAll = () => { if (locked) { showToast("Gameweek locked"); return; } updateMyPred(p => ({ ...p, f4: { ...p.f4, [gw]: {} } })); };
+  const pitchOrder = ["FWD","MID","DEF","GK"];
   return (
     <div>
       {locked && <div className="lock-banner">🔒 Fantastic Four for GW{gw} is locked.</div>}
-      <p className="helper" style={{ marginBottom:16 }}>Pick one player per position — you score the sum of their real FPL points this gameweek (bonuses included). DEF/MID: once all season. GK/FWD: twice, once per half. Tap a slot to browse players with live FPL stats.</p>
-      {POSITIONS.map(pos => {
-        const currentId = f4[slotKey[pos]];
-        const current = currentId ? players[currentId] : null;
-        return (
-          <F4Slot key={pos} pos={pos} gw={gw} locked={locked} current={current}
-            players={players} teams={teamList} teamsById={teams} byTeamPos={byTeamPos}
-            isAvailable={isAvailable} live={live} fixtures={fixtures} boot={boot}
-            onPick={(pid)=>setPlayer(pos, pid)} onClear={()=>setPlayer(pos, undefined)} showToast={showToast} />
-        );
-      })}
-      {!locked && hasAny && (
-        <div style={{ marginBottom:12 }}>
-          <button className="btn btn-ghost btn-sm" onClick={clearAll}>✕ Clear all four</button>
-        </div>
-      )}
-      <div className="card" style={{ marginTop:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+      <p className="helper" style={{ marginBottom:16 }}>Tap a spot on the pitch to pick that position — you score the sum of your four players' real FPL points. DEF/MID: once all season. GK/FWD: twice, once per half.</p>
+      <div className="pitch">
+        <div className="pitch-box top"></div>
+        <div className="pitch-box bottom"></div>
+        {pitchOrder.map(pos => {
+          const currentId = f4[slotKey[pos]];
+          const current = currentId ? players[currentId] : null;
+          return (
+            <F4Slot key={pos} pos={pos} gw={gw} locked={locked} current={current}
+              players={players} teams={teamList} teamsById={teams} byTeamPos={byTeamPos}
+              isAvailable={isAvailable} live={live} fixtures={fixtures} boot={boot}
+              onPick={(pid)=>setPlayer(pos, pid)} onClear={()=>setPlayer(pos, undefined)} showToast={showToast} />
+          );
+        })}
+      </div>
+      <div className="card" style={{ marginTop:16, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
         <div className="card-title" style={{ margin:0, fontSize:18 }}>Fantastic Four total (GW{gw})</div>
-        <div style={{ fontFamily:'Anton', fontSize:32, color:'var(--accent-2)' }}>{sum}</div>
+        <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+          {!locked && hasAny && <button className="btn btn-ghost btn-sm" onClick={clearAll}>✕ Clear all</button>}
+          <div style={{ fontFamily:'Anton', fontSize:32, color:'var(--accent-2)' }}>{sum}</div>
+        </div>
       </div>
     </div>
   );
@@ -1959,30 +2010,18 @@ function F4Slot({ pos, gw, locked, current, players, teams, teamsById, byTeamPos
   const st = statusInfo(current);
   const fixLabels = current ? playerFixtureLabels(fixtures, teamsById, current.teamId) : [];
   return (
-    <div style={{ marginBottom:12 }}>
-      <div className="f4card">
-        <TeamBadge short={current ? current.teamShort : ""} boot={boot} size={40} />
-        <div style={{ flex:1, minWidth:0 }}>
-          <div className="slotpos">{POS_LABEL[pos]}</div>
-          {current ? (
-            <React.Fragment>
-              <div className="fname">{current.name}</div>
-              <div className="pmeta">{current.teamShort} · {fixLabels.length ? fixLabels.join(", ") : "no fixture"} · <span style={{ color: st.color }}><span className="statdot" style={{ background: st.color }}></span>{st.label}</span></div>
-              <div className="pmeta">Form <b>{fmtNum(current.form)}</b> · PPG <b>{fmtNum(current.ppg)}</b> · Pts <b>{fmtNum(current.pts)}</b> · TSB <b>{fmtTSB(current.tsb)}</b></div>
-              {!st.ok && current.news ? <div style={{ marginTop:6, fontSize:12, color:'var(--red)' }}>{current.news}</div> : null}
-            </React.Fragment>
-          ) : (
-            <div className="fname" style={{ color:'var(--ink-mute)' }}>Empty</div>
-          )}
-        </div>
-        <div style={{ textAlign:'right' }}>
-          {showPts ? <div style={{ fontFamily:'Anton', fontSize:26, color:'var(--accent-2)' }}>{pts}</div> : null}
-          <div style={{ display:'flex', gap:6, justifyContent:'flex-end', marginTop:8, flexWrap:'wrap' }}>
-            {current && !locked && <button className="btn btn-ghost btn-sm" onClick={onClear}>Clear</button>}
-            <button className="btn btn-sm btn-primary" disabled={locked} onClick={()=>setOpen(true)}>{current ? "Swap" : "Choose"}</button>
-          </div>
-        </div>
-      </div>
+    <div className="pitch-slot">
+      <button className={"pitch-node" + (current?" filled":"")} disabled={locked} onClick={()=>setOpen(true)} title={current?("Swap "+current.name):("Pick "+POS_LABEL[pos])}>
+        {current ? <TeamBadge short={current.teamShort} boot={boot} size={42} /> : <span className="pitch-plus">+</span>}
+        {showPts ? <span className="pitch-pts">{pts}</span> : null}
+      </button>
+      <div className="pitch-tag">{current ? current.name : pos}</div>
+      {current ? (
+        <div className="pitch-meta">{current.teamShort}{fixLabels.length ? " · " + fixLabels.join(", ") : ""}{!st.ok ? <span style={{ color:'#ffbdbd' }}> · {st.label}</span> : ""}</div>
+      ) : (
+        <div className="pitch-meta muted">{POS_LABEL[pos]}</div>
+      )}
+      {current && !locked && <button className="pitch-clear" onClick={onClear}>clear</button>}
       {open && !locked && (
         <F4PickerModal pos={pos} gw={gw} current={current} players={players} teams={teams} teamsById={teamsById} isAvailable={isAvailable} fixtures={fixtures} boot={boot}
           onClose={()=>setOpen(false)} onPick={(pid)=>{ onPick(pid); setOpen(false); }} />
@@ -2334,98 +2373,121 @@ function PicksView({ state, users, currentUser, fpl }) {
 // LEADERBOARD
 // ============================================================
 function LeaderboardView({ standings, currentUser, state, users, fpl, fplBusy, onRefresh }) {
-  const [board, setBoard] = useState("overall");
-  const [expanded, setExpanded] = useState(null);
+  const [board, setBoard] = useState("overall");   // overall | stb | f4
+  const [mode, setMode] = useState("overall");      // overall (cumulative) | gw
+  const activeGW = state.activeGW || 1;
+  const [gwSel, setGwSel] = useState(activeGW);
+  const [detail, setDetail] = useState(null);
 
-  const overall = standings;
-  const predictions = [...standings].sort((a,b) => (b.breakdown.scores + b.breakdown.team) - (a.breakdown.scores + a.breakdown.team));
-  const f4board = [...standings].sort((a,b) => b.breakdown.f4 - a.breakdown.f4);
-  const prev = (state.activeGW||1) > 1 ? computeStandings(users, state, fpl, (state.activeGW||1) - 1) : [];
-  const survivors = (state.survivorEnabled && users) ? computeSurvivorStandings(users, state, fpl) : [];
+  const prev = activeGW > 1 ? computeStandings(users, state, fpl, activeGW - 1) : [];
+  const comp = (s, useGW) => {
+    const b = useGW ? ((s.perGW && s.perGW[gwSel]) || { scores:0, team:0, f4:0, bonus:0 })
+                    : { scores:s.breakdown.scores, team:s.breakdown.team, f4:s.breakdown.f4, bonus:s.breakdown.bonus||0 };
+    const total = board==="overall" ? (b.scores+b.team+b.f4+b.bonus) : board==="stb" ? (b.scores+b.team+b.bonus) : b.f4;
+    return { ...b, total };
+  };
+  const rows = [...standings].sort((a,b) => comp(b, mode==="gw").total - comp(a, mode==="gw").total);
+  const prevSorted = [...prev].sort((a,b) => comp(b,false).total - comp(a,false).total);
+  const prevRank = {}; prevSorted.forEach((s,i) => { prevRank[s.name] = i+1; });
+  const detailStanding = detail ? standings.find(s => s.name === detail) : null;
+  const potName = board==="overall" ? "Overall" : board==="stb" ? "Scores + Team + Bonus" : "Fantastic Four";
+  const potDesc = board==="overall" ? "Everything combined." : board==="stb" ? "Prize pot 1 — score predictions, team of the week & bonus questions." : "Prize pot 2 — Fantastic Four only.";
 
   return (
     <div>
       <div className="page-head">
         <div className="eyebrow">SEASON STANDINGS · {state.season}</div>
         <h1 className="page-title">THE <span className="it">table.</span></h1>
-        <p className="page-sub">Live through GW{state.activeGW}. Points update automatically as FPL results come in.</p>
       </div>
-      <div className="nav" style={{ marginBottom: 20 }}>
+      <div className="nav" style={{ marginBottom:16 }}>
         <button className={board==="overall"?"active":""} onClick={()=>setBoard("overall")}>Overall</button>
-        <button className={board==="predictions"?"active":""} onClick={()=>setBoard("predictions")}>Scores + Team</button>
+        <button className={board==="stb"?"active":""} onClick={()=>setBoard("stb")}>Scores + Team + Bonus</button>
         <button className={board==="f4"?"active":""} onClick={()=>setBoard("f4")}>Fantastic Four</button>
-        {state.survivorEnabled && <button className={board==="survivor"?"active":""} onClick={()=>setBoard("survivor")}>Survivor</button>}
       </div>
-      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:16 }}>
-        <button className="btn btn-ghost btn-sm" onClick={onRefresh} disabled={fplBusy}>{fplBusy?"↻ Refreshing…":"↻ Refresh results"}</button>
+      <div className="lb-head-card">
+        <div style={{ fontSize:14 }}>🏆 <strong>{potName}:</strong> <span style={{ color:'var(--ink-dim)' }}>{potDesc} {mode==="gw" ? ("GW"+gwSel+" only.") : "Season total."}</span></div>
+        <div className="lb-modeseg">
+          <button className={mode==="overall"?"active":""} onClick={()=>setMode("overall")}>OVERALL</button>
+          <button className={mode==="gw"?"active":""} onClick={()=>setMode("gw")}>GW</button>
+          {mode==="gw" && (
+            <select value={gwSel} onChange={e=>setGwSel(parseInt(e.target.value,10))}>
+              {Array.from({length: activeGW}, (_,i)=>i+1).map(g => <option key={g} value={g}>GW{g}</option>)}
+            </select>
+          )}
+        </div>
       </div>
-
-      {board==="survivor"
-        ? <SurvivorBoard survivors={survivors} currentUser={currentUser} />
-        : <LeaderTable rows={board==="overall"?overall:board==="predictions"?predictions:f4board} prev={prev} mode={board} currentUser={currentUser} expanded={expanded} setExpanded={setExpanded} />}
-
-      <p className="helper" style={{ marginTop:14 }}>
-        {board==="overall" && "Everything combined: score predictions + team of the week + Fantastic Four + bonus questions. Tap a row for the gameweek split."}
-        {board==="predictions" && "Score predictions plus team of the week only."}
-        {board==="f4" && "Fantastic Four only — the sum of your four players' FPL points each week."}
-        {board==="survivor" && "Last pundit standing. Pick a winner each week, never repeat a team; one draw or loss and you're out."}
-      </p>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+        <div className="lb-colhead-lbl">RANK / MANAGER</div>
+        <button className="btn btn-ghost btn-sm" onClick={onRefresh} disabled={fplBusy}>{fplBusy?"↻ Refreshing…":"↻ Refresh"}</button>
+      </div>
+      {rows.length === 0 ? (
+        <div className="empty"><div className="empty-title">NO POINTS YET</div><p>Once results land, the table fills in here.</p></div>
+      ) : rows.map((s, i) => {
+        const v = comp(s, mode==="gw");
+        const pr = prevRank[s.name];
+        const delta = (mode==="overall" && prev.length && pr) ? (pr - (i+1)) : null;
+        return <LeaderRow key={s.name} s={s} i={i} v={v} delta={delta} board={board} isYou={s.name===currentUser} onClick={()=>setDetail(s.name)} />;
+      })}
+      {detailStanding && <PlayerDetailModal standing={detailStanding} onClose={()=>setDetail(null)} />}
+      <p className="helper" style={{ marginTop:14 }}>Tap any pundit for their gameweek-by-gameweek breakdown. Two separate prize pots: <strong>Scores + Team + Bonus</strong> and <strong>Fantastic Four</strong>, plus the combined <strong>Overall</strong> table.{mode==="overall"?" Arrows show movement since last gameweek.":""}</p>
     </div>
   );
 }
 
-function LeaderTable({ rows, prev, mode, currentUser, expanded, setExpanded }) {
-  if (!rows.length) return <div className="empty"><div className="empty-title">NO POINTS YET</div><p>Once results land, the table fills in here.</p></div>;
-  const rankClass = i => "lb-rank" + (i===0?" gold":i===1?" silver":i===2?" bronze":"");
-  const valOf = (s) => mode==="overall" ? s.total : mode==="predictions" ? (s.breakdown.scores + s.breakdown.team) : s.breakdown.f4;
-  const label = mode==="overall" ? "Total" : mode==="predictions" ? "Combined" : "Points";
-  const prevSorted = (prev || []).slice().sort((a,b) => valOf(b) - valOf(a));
-  const prevRank = {}; prevSorted.forEach((s,i) => { prevRank[s.name] = i+1; });
-  const hasPrev = prevSorted.length > 0;
-  const move = (name, rank) => {
-    const pr = prevRank[name];
-    if (!hasPrev || pr == null) return <span className="lb-move new" title="new this week">•</span>;
-    const d = pr - rank;
-    if (d > 0) return <span className="lb-move up" title={"up "+d}>▲{d}</span>;
-    if (d < 0) return <span className="lb-move down" title={"down "+(-d)}>▼{-d}</span>;
-    return <span className="lb-move same" title="no change">–</span>;
-  };
+function LeaderRow({ s, i, v, delta, board, isYou, onClick }) {
+  const rankColor = i===0 ? "var(--yellow)" : i===1 ? "#cfd0d4" : i===2 ? "#d4824a" : "var(--ink-mute)";
+  const move = delta==null ? null : delta>0 ? { t:"▲ UP "+delta, c:"var(--accent-2)" } : delta<0 ? { t:"▼ DOWN "+(-delta), c:"var(--red)" } : { t:"— no change", c:"var(--ink-mute)" };
+  const boxes = board==="overall" ? [["SCORES",v.scores],["TEAM",v.team],["F4",v.f4],["BONUS",v.bonus]]
+    : board==="stb" ? [["SCORES",v.scores],["TEAM",v.team],["BONUS",v.bonus]]
+    : [["F4",v.f4]];
   return (
-    <div className="card" style={{ overflowX:'auto', padding:0 }}>
-      <table className="lb-table lb-compact" style={{ minWidth:360 }}>
-        <thead><tr>
-          <th>#</th><th></th><th>Pundit</th><th style={{textAlign:'right'}}>{label}</th>
-        </tr></thead>
-        <tbody>
-          {rows.map((s, i) => (
-            <React.Fragment key={s.name}>
-              <tr onClick={()=>setExpanded(expanded===s.name?null:s.name)} style={{ cursor:'pointer' }}>
-                <td className={rankClass(i)}>{i+1}</td>
-                <td className="lb-move-cell">{move(s.name, i+1)}</td>
-                <td style={{ fontWeight:600 }}>{s.name}{s.name===currentUser?<span style={{color:'var(--accent-2)'}}> · you</span>:""} <span style={{ color:'var(--ink-mute)', fontSize:11 }}>{expanded===s.name?"▾":"▸"}</span></td>
-                <td className="lb-total">{valOf(s)}</td>
-              </tr>
-              {expanded===s.name && (
-                <tr><td colSpan={4} className="lb-detail">
-                  <div style={{ padding:'10px 12px' }}>
-                    <div className="lb-detail-sections">Scores <strong>{s.breakdown.scores}</strong> · Team <strong>{s.breakdown.team}</strong> · F4 <strong>{s.breakdown.f4}</strong> · Bonus <strong>{s.breakdown.bonus||0}</strong></div>
-                    {Object.keys(s.perGW).length === 0 ? <div className="empty-mini">No scored gameweeks yet.</div> : (
-                      <table className="lb-week">
-                        <thead><tr><th>GW</th><th>Scores</th><th>Team</th><th>F4</th><th>Bonus</th><th>Total</th></tr></thead>
-                        <tbody>
-                          {Object.entries(s.perGW).sort((a,b)=>parseInt(a[0])-parseInt(b[0])).map(([g,v]) => (
-                            <tr key={g}><td>GW{g}</td><td>{v.scores}</td><td>{v.team}</td><td>{v.f4}</td><td>{v.bonus}</td><td className="lb-week-tot">{v.total}</td></tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                </td></tr>
-              )}
-            </React.Fragment>
-          ))}
-        </tbody>
-      </table>
+    <div className="lb-row" onClick={onClick}>
+      <div className="lb-row-rank" style={{ color:rankColor }}>{i>=3?"#":""}{i+1}</div>
+      <div className="lb-row-name">
+        <div className="lb-row-mgr">{s.name}{isYou?<span style={{color:'var(--accent-2)', fontSize:13}}> · you</span>:""}</div>
+        {move && <div className="lb-row-move" style={{ color:move.c }}>{move.t}</div>}
+      </div>
+      <div className="lb-row-stats">
+        {boxes.map(([l,val]) => <div key={l} className={"lb-statbox" + (l==="BONUS"?" bonus":"")}><div className="lb-sb-l">{l}</div><div className="lb-sb-v">{val}</div></div>)}
+      </div>
+      <div className="lb-row-total">
+        <div className="lb-tot-l">TOTAL PTS</div>
+        <div className="lb-tot-v">{v.total}</div>
+      </div>
+    </div>
+  );
+}
+
+function PlayerDetailModal({ standing, onClose }) {
+  const perGW = standing.perGW || {};
+  const gws = Object.keys(perGW).map(Number).sort((a,b)=>b-a);
+  const totals = gws.map(g => perGW[g].total);
+  const highest = totals.length ? Math.max(...totals) : 0;
+  const lowest = totals.length ? Math.min(...totals) : 0;
+  const avg = totals.length ? (standing.total / totals.length) : 0;
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth:560 }} onClick={e=>e.stopPropagation()}>
+        <div className="modal-head"><h3>{standing.name}</h3><button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button></div>
+        <div className="modal-body">
+          <div className="pd-summary">
+            <div className="pd-sum"><div className="pd-sum-l">TOTAL PTS</div><div className="pd-sum-v" style={{ color:'var(--accent-2)' }}>{standing.total}</div></div>
+            <div className="pd-sum"><div className="pd-sum-l">HIGHEST GW</div><div className="pd-sum-v">{highest}</div></div>
+            <div className="pd-sum"><div className="pd-sum-l">LOWEST GW</div><div className="pd-sum-v">{lowest}</div></div>
+            <div className="pd-sum"><div className="pd-sum-l">AVERAGE</div><div className="pd-sum-v">{avg.toFixed(1)}</div></div>
+          </div>
+          <div className="pd-hist-title">Gameweek History</div>
+          {gws.length === 0 ? <div className="empty-mini">No scored gameweeks yet.</div> : (
+            <table className="lb-week pd-hist">
+              <thead><tr><th>GW</th><th>Scores</th><th>Team</th><th>F4</th><th>Bonus</th><th>Total</th></tr></thead>
+              <tbody>
+                {gws.map(g => { const x = perGW[g]; return <tr key={g}><td>GW{g}</td><td>{x.scores}</td><td>{x.team}</td><td>{x.f4}</td><td>{x.bonus}</td><td className="lb-week-tot">{x.total}</td></tr>; })}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <div className="modal-foot"><button className="btn btn-primary btn-sm" onClick={onClose}>Close</button></div>
+      </div>
     </div>
   );
 }
