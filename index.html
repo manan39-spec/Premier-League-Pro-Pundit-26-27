@@ -1499,7 +1499,7 @@ function RulesView({ state }) {
         <div className="card">
           <div className="card-title">Bonus Questions</div>
           <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Some gameweeks the admin posts a few bonus questions — yes/no or multiple choice. Answer before the deadline; points land once the admin settles the correct answer.</p>
-          <p className="helper" style={{ marginTop:10 }}>Bonus points roll into your Overall total.</p>
+           <p className="helper" style={{ marginTop:10 }}>Bonus points roll into your Fantastic Four total.</p>
         </div>
       </div>
     </div>
@@ -2390,7 +2390,7 @@ function LeaderboardView({ standings, currentUser, state, users, fpl, fplBusy, o
   const prevSorted = [...prev].sort((a,b) => comp(b,false).total - comp(a,false).total);
   const prevRank = {}; prevSorted.forEach((s,i) => { prevRank[s.name] = i+1; });
   const detailStanding = detail ? standings.find(s => s.name === detail) : null;
-  const potName = board==="overall" ? "Overall" : board==="stb" ? "Scores + Team" : "Fantastic Four + Bonus";
+    const potName = board==="overall" ? "Overall" : board==="stb" ? "Scores + Team" : "Fantastic Four + Bonus";
   const potDesc = board==="overall" ? "Everything combined." : board==="stb" ? "Prize pot 1 — score predictions & team of the week." : "Prize pot 2 — Fantastic Four & bonus questions.";
   return (
     <div>
