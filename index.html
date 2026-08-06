@@ -49,6 +49,8 @@
   .bb-btn .bb-lbl { max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .bb-btn:hover { color:var(--ink); }
   .bb-btn.active { color:var(--accent); background:rgba(233,0,82,0.10); }
+  .team-chip.sv-disabled { opacity:0.4; cursor:not-allowed; }
+  .team-chip.sv-disabled:hover { border-color:var(--line); }
   .lb-compact th, .lb-compact td { padding:11px 12px; }
   .lb-move { font-family:'JetBrains Mono', monospace; font-size:11px; font-weight:700; }
   .lb-move.up { color:var(--accent-2); }
@@ -679,7 +681,8 @@ function defaultState() {
     selectedFixtures: {},   // { [gw]: [fixtureId,...] } which fixtures count for score predictions
     scoring: DEFAULT_SCORING,
     bonus: {},
-    survivorEnabled: false,   // survivor game removed
+    survivorEnabled: true,
+    survivorRounds: [],   // [{ id, no, startGW }] admin-created, non-overlapping
     _v: 1,
   };
 }
@@ -808,50 +811,125 @@ function gwLocked(state, fpl, gw, now) {
 // ============================================================
 function computeUserSeason(pred, state, fpl, maxGWOverride) {
   const cfg = state.scoring || DEFAULT_SCORING;
-  const bd = { scores: 0, team: 0, f4: 0, bonus: 0 };
+  const bd = { scores: 0, f4: 0, bonus: 0 };
   const perGW = {};
   const maxGW = (maxGWOverride != null) ? maxGWOverride : (state.activeGW || 1);
-  // chronological team usage
-  const teamCount = {};
   for (let gw = 1; gw <= maxGW; gw++) {
     const gwFx = (fpl.fixturesByGW && fpl.fixturesByGW[gw]) || [];
     const live = (fpl.liveByGW && fpl.liveByGW[gw]) || {};
-    let sPts = 0, tPts = 0, fPts = 0;
-    // score predictions (only the fixtures admin selected for this GW)
+    let sPts = 0, fPts = 0, bPts = 0;
     const selIds = (state.selectedFixtures && state.selectedFixtures[gw]) || [];
     const preds = (pred.scores && pred.scores[gw]) || {};
     selIds.forEach(fid => {
       const fx = gwFx.find(f => String(f.id) === String(fid));
       if (fx) sPts += scoreFixturePoints(preds[fid], fx, cfg);
     });
-    // team pick
-    const tp = (pred.teamPick && pred.teamPick[gw]) || null;
-    if (tp && tp.team) {
-      const before = teamCount[tp.team] || 0;
-      tPts += teamPickPoints(tp, gwFx, before, cfg);
-      teamCount[tp.team] = before + 1;
-    }
-    // fantastic four
     const f4 = (pred.f4 && pred.f4[gw]) || null;
     if (f4) fPts += f4Points(f4, live, cfg);
-    // bonus questions
-    let bPts = 0;
     const bq = (state.bonus && state.bonus[gw]) || [];
     const bans = (pred.bonusAnswers && pred.bonusAnswers[gw]) || {};
     bq.forEach(q => {
       if (q.answer !== undefined && q.answer !== null && q.answer !== "" && bans[q.id] != null && String(bans[q.id]) === String(q.answer)) bPts += Number(q.points) || 0;
     });
-
-    bd.scores += sPts; bd.team += tPts; bd.f4 += fPts; bd.bonus += bPts;
-    if (sPts || tPts || fPts || bPts) perGW[gw] = { scores: sPts, team: tPts, f4: fPts, bonus: bPts, total: sPts + tPts + fPts + bPts };
+    bd.scores += sPts; bd.f4 += fPts; bd.bonus += bPts;
+    if (sPts || fPts || bPts) perGW[gw] = { scores: sPts, f4: fPts, bonus: bPts, total: sPts + fPts + bPts };
   }
-  const total = bd.scores + bd.team + bd.f4 + bd.bonus;
+  const total = bd.scores + bd.f4 + bd.bonus;
   return { name: pred.name, total, breakdown: bd, perGW };
 }
+
 function computeStandings(users, state, fpl, maxGWOverride) {
   return (users || [])
     .map(u => computeUserSeason(u, state, fpl, maxGWOverride))
     .sort((a, b) => b.total - a.total);
+}
+
+// ============================================================
+// SURVIVOR ENGINE (multi-round, dynamic bottom-3 eligibility)
+// ============================================================
+function allLoadedFixtures(fpl) {
+  const out = []; const byGW = (fpl && fpl.fixturesByGW) || {};
+  Object.keys(byGW).forEach(g => { (byGW[g] || []).forEach(f => out.push(f)); });
+  return out;
+}
+// Did a picked team survive gameweek gw? (needs a win; DGW = a win in either game keeps you alive)
+function teamSurvives(short, gw, allFixtures) {
+  const ms = (allFixtures || []).filter(f => f.gw === gw && (f.teamH === short || f.teamA === short));
+  if (!ms.length) return { decided: true, survives: false };
+  const won = ms.some(f => f.finished && f.hScore != null && f.aScore != null && ((f.teamH === short && f.hScore > f.aScore) || (f.teamA === short && f.aScore > f.hScore)));
+  if (won) return { decided: true, survives: true };
+  const allFinished = ms.every(f => f.finished && f.hScore != null && f.aScore != null);
+  if (allFinished) return { decided: true, survives: false };
+  return { decided: false, survives: false };
+}
+function survivorRoundRange(rounds, i) {
+  const start = rounds[i].startGW;
+  const end = (i + 1 < rounds.length) ? (rounds[i + 1].startGW - 1) : TOTAL_GW;
+  return [start, end];
+}
+// Process one round week by week. status: picking | awaiting | settled | void
+function computeSurvivorRound(rounds, i, users, state, fpl, allFixtures) {
+  const [startGW, endGW] = survivorRoundRange(rounds, i);
+  let alive = (users || []).map(u => u.name);
+  const elimByGW = {}; let status = "picking", winners = [], settledGW = null, currentGW = startGW;
+  for (let gw = startGW; gw <= endGW; gw++) {
+    currentGW = gw;
+    if (!gwLocked(state, fpl, gw)) { status = "picking"; break; }
+    const survived = [], out = []; let pending = false;
+    for (const name of alive) {
+      const u = (users || []).find(x => x.name === name);
+      const pick = u && u.survivor && u.survivor[gw];
+      if (!pick) { out.push(name); continue; }
+      const r = teamSurvives(pick, gw, allFixtures);
+      if (r.decided) { (r.survives ? survived : out).push(name); } else { pending = true; }
+    }
+    elimByGW[gw] = out;
+    if (pending) { alive = alive.filter(n => !out.includes(n)); status = "awaiting"; break; }
+    if (survived.length === 0) { alive = []; status = "void"; settledGW = gw; break; }
+    if (survived.length <= 3) { alive = survived.slice(); winners = survived.slice(); status = "settled"; settledGW = gw; break; }
+    alive = survived; status = "picking";
+  }
+  return { id: rounds[i].id, no: rounds[i].no, startGW, endGW, status, alive, winners, elimByGW, settledGW, currentGW };
+}
+function computeAllSurvivorRounds(state, users, fpl) {
+  const rounds = (state && state.survivorRounds) || [];
+  const allFx = allLoadedFixtures(fpl);
+  return rounds.map((r, i) => computeSurvivorRound(rounds, i, users, state, fpl, allFx));
+}
+function survivorPointsByName(roundResults) {
+  const pts = {};
+  (roundResults || []).forEach(rr => { if (rr.status === "settled") rr.winners.forEach(n => { pts[n] = (pts[n] || 0) + 1; }); });
+  return pts;
+}
+function activeSurvivorRound(roundResults) {
+  for (let i = (roundResults || []).length - 1; i >= 0; i--) {
+    const r = roundResults[i];
+    if (r.status === "picking" || r.status === "awaiting") return r;
+  }
+  return null;
+}
+// bottom-3 shorts by the table AS OF gw-1 (empty = no restriction, e.g. GW1 / preseason)
+function survivorBottom3(allFixtures, teamsById, gw) {
+  const teams = Object.values(teamsById || {});
+  const table = buildLeagueTable(teams, allFixtures, gw - 1);
+  if (!table.some(r => r.played > 0)) return [];
+  return table.slice(-3).map(r => r.short);
+}
+// map: blockedShort -> the bottom-3 opponent that blocks it
+function survivorBlocked(gwFixtures, bottom3) {
+  const blocked = {};
+  (gwFixtures || []).forEach(f => {
+    const hB = bottom3.includes(f.teamH), aB = bottom3.includes(f.teamA);
+    if (hB && !aB) blocked[f.teamA] = f.teamH;
+    if (aB && !hB) blocked[f.teamH] = f.teamA;
+  });
+  return blocked;
+}
+// teams already used earlier this round: short -> gw
+function survivorUsed(pred, startGW, gw) {
+  const used = {};
+  for (let g = startGW; g < gw; g++) { const t = pred && pred.survivor && pred.survivor[g]; if (t) used[t] = g; }
+  return used;
 }
 
 // ---- Survivor / last-man-standing ----
@@ -894,9 +972,7 @@ function computeSurvivorStandings(users, state, fpl, now) {
 // MAIN APP
 // ============================================================
 function BottomNav({ view, predictTab, goPredict, survivorEnabled }) {
-  const items = [["scores","🎯","Scores"],["team","🛡️","Team"],["f4","⭐","F4"]]
-    .concat(survivorEnabled ? [["survivor","💀","Survivor"]] : [])
-    .concat([["bonus","❓","Bonus"]]);
+  const items = [["scores","🎯","Scores"],["survivor","💀","Survivor"],["f4","⭐","F4"],["bonus","❓","Bonus"]];
   return (
     <nav className="bottombar" aria-label="Prediction sections">
       <div className="bottombar-inner">
@@ -950,7 +1026,8 @@ function App() {
     if (!s.locks) { s.locks = {}; save = true; }
     if (!s.selectedFixtures) { s.selectedFixtures = {}; save = true; }
     if (!s.bonus) { s.bonus = {}; save = true; }
-    if (s.survivorEnabled !== false) { s.survivorEnabled = false; save = true; }
+    if (s.survivorEnabled === undefined) { s.survivorEnabled = true; save = true; }
+    if (!Array.isArray(s.survivorRounds)) { s.survivorRounds = []; save = true; }
     if (!s.activeGW) { s.activeGW = 1; save = true; }
     if (!s.openGWs || !s.openGWs.length) { s.openGWs = [s.activeGW || 1]; save = true; }
     if (save && apiReady) await setShared("pp_state", s);
@@ -1127,6 +1204,8 @@ function App() {
   }, [loadUsers]);
 
   const standings = useMemo(() => state ? computeStandings(users, state, fpl) : [], [users, state, fpl]);
+  const survivorRounds = useMemo(() => state ? computeAllSurvivorRounds(state, users, fpl) : [], [state, users, fpl]);
+  const survivorPts = useMemo(() => survivorPointsByName(survivorRounds), [survivorRounds]);
 
   if (loading) {
     return (
@@ -1161,10 +1240,10 @@ function App() {
         </nav>
 
         {view==="home" && <HomeView state={state} user={user} myPred={myPred} standings={standings} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} setView={setView} goPredict={goPredict} />}
-        {view==="predict" && <PredictView state={state} myPred={myPred} users={users} fpl={fpl} updateMyPred={updateMyPred} showToast={showToast} tab={predictTab} setTab={setPredictTab} />}
+        {view==="predict" && <PredictView state={state} myPred={myPred} users={users} fpl={fpl} updateMyPred={updateMyPred} showToast={showToast} tab={predictTab} setTab={setPredictTab} survivorRounds={survivorRounds} />}
         {view==="fixtures" && <FixturesView state={state} fpl={fpl} />}
         {view==="picks" && <PicksView state={state} users={users} currentUser={user} fpl={fpl} />}
-        {view==="leaderboard" && <LeaderboardView standings={standings} currentUser={user} state={state} users={users} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} />}
+        {view==="leaderboard" && <LeaderboardView standings={standings} currentUser={user} state={state} users={users} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} survivorPts={survivorPts} />}
         {view==="rules" && <RulesView state={state} />}
         {view==="admin" && <AdminView state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} isAdmin={isAdmin} setIsAdmin={setIsAdmin} adminRole={adminRole} setAdminRole={setAdminRole} showToast={showToast} onRefresh={()=>refreshAll(true)} adminAddUser={adminAddUser} adminSetPassword={adminSetPassword} adminDeleteUser={adminDeleteUser} iAmAdmin={!!(myPred && myPred.email && ADMIN_EMAILS.some(e=>e && e.toLowerCase()===String(myPred.email).toLowerCase()))} />}
 
@@ -1376,9 +1455,8 @@ function HomeView({ state, user, myPred, standings, fpl, fplBusy, onRefresh, set
         <div className="card-title" style={{ fontSize:18 }}>Jump to your picks</div>
         <div className="quick-nav">
           <button className="qn-btn" onClick={()=>goPredict("scores")}><span className="qn-emoji">🎯</span>Score Predictions</button>
-          <button className="qn-btn" onClick={()=>goPredict("team")}><span className="qn-emoji">🛡️</span>Team of the Week</button>
+          <button className="qn-btn" onClick={()=>goPredict("survivor")}><span className="qn-emoji">💀</span>Survivor</button>
           <button className="qn-btn" onClick={()=>goPredict("f4")}><span className="qn-emoji">⭐</span>Fantastic Four</button>
-          {state.survivorEnabled && <button className="qn-btn" onClick={()=>goPredict("survivor")}><span className="qn-emoji">💀</span>Survivor</button>}
           <button className="qn-btn" onClick={()=>goPredict("bonus")}><span className="qn-emoji">❓</span>Bonus</button>
         </div>
       </div>
@@ -1443,7 +1521,7 @@ function RulesView({ state }) {
           </div>
         </div>
         <div className="card">
-          <div className="card-title">2 · Team of the Week</div>
+          <div className="card-title">2 · Survivor</div>
           <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Pick one team you're sure will <strong style={{color:'var(--ink)'}}>win</strong> this gameweek. A draw doesn't count — win only.</p>
           <ul className="rules-list compact" style={{ marginTop:12 }}>
             <li><span className="rule-name">Correct win</span><span className="rule-points">{sc.teamWin}</span></li>
@@ -1455,6 +1533,10 @@ function RulesView({ state }) {
           <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Pick a GK, defender, midfielder and forward. You score the <strong style={{color:'var(--ink)'}}>sum of their real FPL points</strong> that gameweek — bonuses included.</p>
           <p className="helper" style={{ marginTop:10 }}>Defender & midfielder: usable <strong>once</strong> all season. Goalkeeper & forward: <strong>twice</strong>, but once in GW1-{HALF_SPLIT} and once in GW{HALF_SPLIT+1}-{TOTAL_GW}. Used players drop out of the menus automatically.</p>
         </div>
+      </div>
+      <div className="card" style={{ marginTop:18 }}>
+        <div className="card-title">Survivor</div>
+        <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Each gameweek, pick one team to <strong style={{color:'var(--ink)'}}>win</strong>. Win and you advance; a draw, a loss, or a missed deadline knocks you out for the round. Each team is usable <strong>only once per round</strong>, and you <strong>can't pick the opponent of a bottom-3 club</strong> (you can pick the bottom-3 club itself; if two bottom-3 sides meet, either is fair game). A round runs until 3 or fewer pundits are left — each survivor scores <strong>1 point</strong>. If everyone is knocked out in the same week the round voids and restarts with nobody scoring. Most round wins takes the Survivor prize pot.</p>
       </div>
       <div style={{ marginTop:18 }}>
         <div className="card">
@@ -1772,7 +1854,7 @@ function playersByTeamPos(players) {
   return out;
 }
 
-function PredictView({ state, myPred, users, fpl, updateMyPred, showToast, tab, setTab }) {
+function PredictView({ state, myPred, users, fpl, updateMyPred, showToast, tab, setTab, survivorRounds }) {
   const openGWs = (state.openGWs && state.openGWs.length) ? state.openGWs.slice() : [state.activeGW || 1];
   const selectable = Array.from(new Set([...openGWs, state.activeGW || 1])).sort((a, b) => a - b);
   const [gw, setGw] = useState(state.activeGW || 1);
@@ -1807,16 +1889,14 @@ function PredictView({ state, myPred, users, fpl, updateMyPred, showToast, tab, 
 
       <div className="nav" style={{ marginBottom: 28 }}>
         <button className={tab==="scores"?"active":""} onClick={()=>setTab("scores")}>Score Predictions</button>
-        <button className={tab==="team"?"active":""} onClick={()=>setTab("team")}>Team of the Week</button>
+        <button className={tab==="survivor"?"active":""} onClick={()=>setTab("survivor")}>Survivor</button>
         <button className={tab==="f4"?"active":""} onClick={()=>setTab("f4")}>Fantastic Four</button>
-        {state.survivorEnabled && <button className={tab==="survivor"?"active":""} onClick={()=>setTab("survivor")}>Survivor</button>}
         <button className={tab==="bonus"?"active":""} onClick={()=>setTab("bonus")}>Bonus</button>
       </div>
 
       {tab==="scores" && <ScoresTab state={state} gw={gw} locked={locked} fixtures={fixtures} boot={boot} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} scoreDraft={scoreDraft} setScoreDraft={setScoreDraft} />}
-      {tab==="team" && <TeamTab state={state} gw={gw} locked={locked} fixtures={fixtures} boot={boot} fpl={fpl} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
       {tab==="f4" && <F4Tab state={state} gw={gw} locked={locked} live={live} boot={boot} fixtures={fixtures} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
-      {tab==="survivor" && <SurvivorTab state={state} gw={gw} locked={locked} fixtures={fixtures} myPred={myPred} fpl={fpl} updateMyPred={updateMyPred} showToast={showToast} />}
+      {tab==="survivor" && <SurvivorTab state={state} myPred={myPred} fpl={fpl} survivorRounds={survivorRounds} updateMyPred={updateMyPred} showToast={showToast} />}
       {tab==="bonus" && <BonusTab state={state} gw={gw} locked={locked} myPred={myPred} fpl={fpl} updateMyPred={updateMyPred} showToast={showToast} />}
     </div>
   );
@@ -2161,58 +2241,109 @@ function F4PickerModal({ pos, gw, current, players, teams, teamsById, isAvailabl
   );
 }
 
-function SurvivorTab({ state, gw, locked, fixtures, myPred, fpl, updateMyPred, showToast }) {
-  if (!state.survivorEnabled) return <div className="empty"><div className="empty-title">SURVIVOR OFF</div><p>The admin hasn't enabled the survivor game.</p></div>;
-  const surv = computeSurvivor(myPred, state, fpl);
+function SurvivorTab({ state, myPred, fpl, survivorRounds, updateMyPred, showToast }) {
   const boot = fpl.boot;
-  const teams = teamsPlayingInGW(fixtures);
-  const used = survivorTeamsUsed(myPred.survivor, gw);
-  const pick = (myPred.survivor && myPred.survivor[gw]) || null;
-  const isOut = surv.status === "out";
+  const me = myPred.name;
+  if (!state.survivorEnabled) return <div className="empty"><div className="empty-title">SURVIVOR OFF</div><p>The survivor game isn't running right now.</p></div>;
+  const active = activeSurvivorRound(survivorRounds);
+  if (!active) {
+    const last = (survivorRounds || [])[(survivorRounds || []).length - 1];
+    const wonMsg = last && last.status === "settled" ? ("Round " + last.no + " is done — winners: " + last.winners.join(", ") + ".") : "";
+    return <div className="empty"><div className="empty-title">NO ACTIVE ROUND</div><p>{wonMsg} The admin will start the next survivor round soon — everyone re-enters and all teams reset.</p></div>;
+  }
+  const gw = active.currentGW;
+  const locked = gwLocked(state, fpl, gw);
+  const amAlive = active.alive.includes(me);
+  let elimGW = null;
+  Object.keys(active.elimByGW || {}).forEach(g => { if ((active.elimByGW[g] || []).includes(me)) elimGW = Number(g); });
+  const myPick = (myPred.survivor && myPred.survivor[gw]) || null;
 
-  const choose = (team) => {
-    if (locked) { showToast("Gameweek locked"); return; }
-    if (isOut) { showToast("You're already out of survivor"); return; }
-    if (used.includes(team) && !(pick && pick.team === team)) { showToast(team + " already used in survivor"); return; }
-    updateMyPred(p => ({ ...p, survivor: { ...p.survivor, [gw]: { team } } }));
+  const allFx = allLoadedFixtures(fpl);
+  const gwFx = (fpl.fixturesByGW && fpl.fixturesByGW[gw]) || [];
+  const bottom3 = survivorBottom3(allFx, boot && boot.teams, gw);
+  const blocked = survivorBlocked(gwFx, bottom3);
+  const used = survivorUsed(myPred, active.startGW, gw);
+  const fullName = (short) => { const t = boot && boot.teams && Object.values(boot.teams).find(x => x.short === short); return t ? t.name : short; };
+
+  const sides = [];
+  gwFx.forEach(f => {
+    sides.push({ short: f.teamH, id: f.teamHId, opp: f.teamA, ha: "H" });
+    sides.push({ short: f.teamA, id: f.teamAId, opp: f.teamH, ha: "A" });
+  });
+  sides.sort((a,b) => fullName(a.short).localeCompare(fullName(b.short)));
+
+  const choose = (short) => {
+    if (locked) { showToast("Locked for this gameweek"); return; }
+    if (blocked[short]) { showToast(short + " is blocked — plays bottom-3 side " + blocked[short]); return; }
+    if (used[short] && myPick !== short) { showToast(short + " already used this round"); return; }
+    updateMyPred(p => ({ ...p, survivor: { ...p.survivor, [gw]: short } }));
   };
-  const clear = () => { if (locked) { showToast("Gameweek locked"); return; } updateMyPred(p => ({ ...p, survivor: { ...p.survivor, [gw]: undefined } })); };
+  const clear = () => { if (locked) { showToast("Locked for this gameweek"); return; } updateMyPred(p => ({ ...p, survivor: { ...p.survivor, [gw]: undefined } })); };
 
-  let resultLine = null;
-  if (locked && pick && pick.team) {
-    const mine = fixtures.filter(f => f.teamH === pick.team || f.teamA === pick.team);
-    const fx = mine[0];
-    if (fx && fx.finished) {
-      const won = (fx.teamH === pick.team && fx.hScore > fx.aScore) || (fx.teamA === pick.team && fx.aScore > fx.hScore);
-      resultLine = <div className="fx-result" style={{ marginTop:16 }}><span>{pick.team} {won?"won":"didn't win"} · {fx.teamH} {fx.hScore}–{fx.aScore} {fx.teamA}</span><span className="pts" style={{ color: won?'var(--accent-2)':'var(--red)' }}>{won?"SURVIVED":"OUT"}</span></div>;
-    }
+  const roundHead = (
+    <div className="card" style={{ marginBottom:16, display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:10 }}>
+      <div><div style={{ fontFamily:'Anton', fontSize:24 }}>Round {active.no}</div><div className="helper" style={{ margin:0 }}>Gameweek {gw} · {active.alive.length} still alive</div></div>
+      <div style={{ textAlign:'right' }}>
+        {amAlive
+          ? <span style={{ fontFamily:'JetBrains Mono', fontSize:12, color:'var(--accent-2)', fontWeight:700 }}>● ALIVE</span>
+          : <span style={{ fontFamily:'JetBrains Mono', fontSize:12, color:'var(--red)', fontWeight:700 }}>✕ OUT{elimGW?(" · GW"+elimGW):""}</span>}
+      </div>
+    </div>
+  );
+
+  if (!amAlive) {
+    return (
+      <div>
+        {roundHead}
+        <div className="empty"><div className="empty-title">YOU'RE OUT OF ROUND {active.no}</div><p>{elimGW?("Knocked out in GW"+elimGW+". "):""}Sit tight — you're back in when the admin starts the next round. Score Predictions, Fantastic Four and Bonus all carry on as normal.</p></div>
+      </div>
+    );
+  }
+
+  if (locked) {
+    return (
+      <div>
+        {roundHead}
+        <div className="lock-banner">🔒 GW{gw} is locked — waiting on results.</div>
+        <div className="card">
+          <div className="card-title" style={{ fontSize:16 }}>Your pick</div>
+          {myPick ? <p style={{ fontSize:15 }}>You backed <strong style={{ color:'var(--accent)' }}>{fullName(myPick)}</strong> to win. Good luck.</p>
+                  : <p style={{ color:'var(--red)' }}>You didn't pick in time — you're eliminated this round once results are in.</p>}
+        </div>
+      </div>
+    );
   }
 
   return (
     <div>
-      {isOut
-        ? <div className="lock-banner">✕ You were knocked out of survivor in GW{surv.outGW}. You can still play everything else.</div>
-        : <div className="lock-banner ok-banner" style={{ color:'var(--ink-dim)' }}>● You're still alive. Pick ONE team to win this gameweek — a draw or loss knocks you out, and you can never reuse a team.</div>}
-      {locked && <div className="lock-banner">🔒 Survivor pick for GW{gw} is locked.</div>}
-      {teams.length === 0 ? <div className="empty-mini">FPL fixtures for GW{gw} aren't available yet.</div> : (
-        <div className="team-grid">
-          {teams.map(t => {
-            const isUsed = used.includes(t);
-            const sel = pick && pick.team === t;
-            return <div key={t} className={"team-chip" + (sel?" selected":"") + (isUsed?" used2":"")} onClick={()=>choose(t)} style={{ cursor: (locked||isOut)?'not-allowed':'pointer' }}>
-              <TeamBadge short={t} boot={boot} size={26} className="chip-badge" />
-              {t}
-              <span className="uses">{opponentsInGW(fixtures, t).join(" · ")}</span>
-              <span className="uses">{isUsed?"used":"available"}</span></div>;
-          })}
+      {roundHead}
+      <p className="helper" style={{ marginBottom:12 }}>Pick one team to <strong>win</strong> GW{gw}. Win → you advance. Draw, loss or no pick → you're out. Each team is usable once per round. You can't pick the opponent of a bottom-3 side.</p>
+      {bottom3.length > 0 && (
+        <div className="card" style={{ marginBottom:14, padding:'12px 14px' }}>
+          <div style={{ fontFamily:'JetBrains Mono', fontSize:11, letterSpacing:'0.08em', color:'var(--ink-mute)', textTransform:'uppercase', marginBottom:6 }}>Bottom 3 this week</div>
+          <div style={{ fontSize:13 }}>{bottom3.join(", ")} — their opponents {Object.keys(blocked).length ? "(" + Object.keys(blocked).join(", ") + ") are blocked" : "are blocked"}.</div>
         </div>
       )}
-      {pick && pick.team && !locked && !isOut && (
-        <div style={{ marginTop:14 }}>
-          <button className="btn btn-ghost btn-sm" onClick={clear}>✕ Clear survivor pick</button>
-        </div>
+      <div className="team-grid">
+        {sides.map(t => {
+          const isUsed = !!used[t.short] && myPick !== t.short;
+          const isBlocked = !!blocked[t.short];
+          const disabled = isUsed || isBlocked;
+          const sel = myPick === t.short;
+          return (
+            <div key={t.short+t.ha} className={"team-chip" + (sel?" selected":"") + (disabled?" sv-disabled":"")} onClick={()=>choose(t.short)} title={fullName(t.short)}>
+              <TeamBadge short={t.short} code={boot&&boot.teams&&boot.teams[t.id]?boot.teams[t.id].code:null} boot={boot} size={20} />
+              <span style={{ marginLeft:6 }}>{t.short}</span>
+              <span className="uses">{isBlocked ? ("vs " + blocked[t.short]) : isUsed ? "used" : (t.ha + " v " + t.opp)}</span>
+            </div>
+          );
+        })}
+      </div>
+      {sides.length === 0 && <div className="empty-mini">No fixtures loaded for GW{gw} yet.</div>}
+      {myPick && <div style={{ marginTop:14 }}><button className="btn btn-ghost btn-sm" onClick={clear}>✕ Clear pick</button></div>}
+      {Object.keys(used).length > 0 && (
+        <p className="helper" style={{ marginTop:14 }}>Used this round: {Object.keys(used).join(", ")}</p>
       )}
-      {resultLine}
     </div>
   );
 }
@@ -2338,13 +2469,13 @@ function PicksView({ state, users, currentUser, fpl }) {
 
       <div className="grid grid-2">
         <div className="card">
-          <div className="card-title">Team of the Week</div>
+          <div className="card-title">Survivor</div>
           <table className="lb-table">
             <thead><tr><th>Pundit</th><th>Pick</th></tr></thead>
             <tbody>
-              {named.map(u => { const tp = (u.teamPick && u.teamPick[gw]) || null;
+              {named.map(u => { const sp = (u.survivor && u.survivor[gw]) || null;
                 return <tr key={u.name}><td style={{fontWeight:600}}>{u.name}{u.name===currentUser?" · you":""}</td>
-                  <td style={{fontFamily:'JetBrains Mono'}}>{tp && tp.team ? tp.team + (tp.oppTag?` (${tp.oppTag})`:"") : "—"}</td></tr>;
+                  <td style={{fontFamily:'JetBrains Mono'}}>{sp || "—"}</td></tr>;
               })}
             </tbody>
           </table>
@@ -2398,26 +2529,33 @@ function PicksView({ state, users, currentUser, fpl }) {
 // ============================================================
 // LEADERBOARD
 // ============================================================
-function LeaderboardView({ standings, currentUser, state, users, fpl, fplBusy, onRefresh }) {
-  const [board, setBoard] = useState("overall");   // overall | stb | f4
+function LeaderboardView({ standings, currentUser, state, users, fpl, fplBusy, onRefresh, survivorPts }) {
+  const [board, setBoard] = useState("overall");   // overall | scoreline | f4 | survivor
   const [mode, setMode] = useState("overall");      // overall (cumulative) | gw
   const activeGW = state.activeGW || 1;
   const [gwSel, setGwSel] = useState(activeGW);
   const [detail, setDetail] = useState(null);
+  const sp = survivorPts || {};
 
   const prev = activeGW > 1 ? computeStandings(users, state, fpl, activeGW - 1) : [];
-  const comp = (s, useGW) => {
-    const b = useGW ? ((s.perGW && s.perGW[gwSel]) || { scores:0, team:0, f4:0, bonus:0 })
-                    : { scores:s.breakdown.scores, team:s.breakdown.team, f4:s.breakdown.f4, bonus:s.breakdown.bonus||0 };
-    const total = board==="overall" ? (b.scores+b.team+b.f4+b.bonus) : board==="stb" ? (b.scores+b.team) : (b.f4+b.bonus);
+  const comp = (s2, useGW) => {
+    const b = useGW ? ((s2.perGW && s2.perGW[gwSel]) || { scores:0, f4:0, bonus:0 })
+                    : { scores:s2.breakdown.scores, f4:s2.breakdown.f4, bonus:s2.breakdown.bonus||0 };
+    const total = board==="scoreline" ? b.scores : board==="f4" ? b.f4 : (b.scores + b.f4 + b.bonus);
     return { ...b, total };
   };
-  const rows = [...standings].sort((a,b) => comp(b, mode==="gw").total - comp(a, mode==="gw").total);
+  const boardTotal = (s2) => board==="survivor" ? (sp[s2.name] || 0) : comp(s2, mode==="gw").total;
+  const rows = [...standings].sort((a,b) => boardTotal(b) - boardTotal(a));
   const prevSorted = [...prev].sort((a,b) => comp(b,false).total - comp(a,false).total);
-  const prevRank = {}; prevSorted.forEach((s,i) => { prevRank[s.name] = i+1; });
-  const detailStanding = detail ? standings.find(s => s.name === detail) : null;
-  const potName = board==="overall" ? "Overall" : board==="stb" ? "Scores + Team" : "Fantastic Four + Bonus";
-  const potDesc = board==="overall" ? "Everything combined." : board==="stb" ? "Prize pot 1 — score predictions & team of the week." : "Prize pot 2 — Fantastic Four & bonus questions.";
+  const prevRank = {}; prevSorted.forEach((s2,i) => { prevRank[s2.name] = i+1; });
+  const detailStanding = detail ? standings.find(s2 => s2.name === detail) : null;
+
+  const potName = board==="overall" ? "Overall (summary)" : board==="scoreline" ? "Scoreline" : board==="f4" ? "Fantastic Four" : "Survivor";
+  const potDesc = board==="overall" ? "Score + F4 + Bonus combined — the summary table (no separate prize)."
+    : board==="scoreline" ? "Prize pot — score predictions only."
+    : board==="f4" ? "Prize pot — Fantastic Four only."
+    : "Prize pot — 1 point per survivor round you win.";
+  const showModeSeg = board !== "survivor";
 
   return (
     <div>
@@ -2427,20 +2565,23 @@ function LeaderboardView({ standings, currentUser, state, users, fpl, fplBusy, o
       </div>
       <div className="nav" style={{ marginBottom:16 }}>
         <button className={board==="overall"?"active":""} onClick={()=>setBoard("overall")}>Overall</button>
-        <button className={board==="stb"?"active":""} onClick={()=>setBoard("stb")}>Scores + Team</button>
-        <button className={board==="f4"?"active":""} onClick={()=>setBoard("f4")}>Fantastic Four + Bonus</button>
+        <button className={board==="scoreline"?"active":""} onClick={()=>setBoard("scoreline")}>Scoreline</button>
+        <button className={board==="f4"?"active":""} onClick={()=>setBoard("f4")}>Fantastic Four</button>
+        <button className={board==="survivor"?"active":""} onClick={()=>setBoard("survivor")}>Survivor</button>
       </div>
       <div className="lb-head-card">
-        <div style={{ fontSize:14 }}>🏆 <strong>{potName}:</strong> <span style={{ color:'var(--ink-dim)' }}>{potDesc} {mode==="gw" ? ("GW"+gwSel+" only.") : "Season total."}</span></div>
-        <div className="lb-modeseg">
-          <button className={mode==="overall"?"active":""} onClick={()=>setMode("overall")}>OVERALL</button>
-          <button className={mode==="gw"?"active":""} onClick={()=>setMode("gw")}>GW</button>
-          {mode==="gw" && (
-            <select value={gwSel} onChange={e=>setGwSel(parseInt(e.target.value,10))}>
-              {Array.from({length: activeGW}, (_,i)=>i+1).map(g => <option key={g} value={g}>GW{g}</option>)}
-            </select>
-          )}
-        </div>
+        <div style={{ fontSize:14 }}>🏆 <strong>{potName}:</strong> <span style={{ color:'var(--ink-dim)' }}>{potDesc}{showModeSeg && mode==="gw" ? (" GW"+gwSel+" only.") : ""}</span></div>
+        {showModeSeg && (
+          <div className="lb-modeseg">
+            <button className={mode==="overall"?"active":""} onClick={()=>setMode("overall")}>OVERALL</button>
+            <button className={mode==="gw"?"active":""} onClick={()=>setMode("gw")}>GW</button>
+            {mode==="gw" && (
+              <select value={gwSel} onChange={e=>setGwSel(parseInt(e.target.value,10))}>
+                {Array.from({length: activeGW}, (_,i)=>i+1).map(g => <option key={g} value={g}>GW{g}</option>)}
+              </select>
+            )}
+          </div>
+        )}
       </div>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
         <div className="lb-colhead-lbl">RANK / MANAGER</div>
@@ -2448,14 +2589,16 @@ function LeaderboardView({ standings, currentUser, state, users, fpl, fplBusy, o
       </div>
       {rows.length === 0 ? (
         <div className="empty"><div className="empty-title">NO POINTS YET</div><p>Once results land, the table fills in here.</p></div>
-      ) : rows.map((s, i) => {
-        const v = comp(s, mode==="gw");
-        const pr = prevRank[s.name];
-        const delta = (mode==="overall" && prev.length && pr) ? (pr - (i+1)) : null;
-        return <LeaderRow key={s.name} s={s} i={i} v={v} delta={delta} board={board} isYou={s.name===currentUser} onClick={()=>setDetail(s.name)} />;
+      ) : rows.map((s2, i) => {
+        const v = board==="survivor"
+          ? { scores:0, f4:0, bonus:0, rounds: sp[s2.name] || 0, total: sp[s2.name] || 0 }
+          : comp(s2, mode==="gw");
+        const pr = prevRank[s2.name];
+        const delta = (board!=="survivor" && mode==="overall" && prev.length && pr) ? (pr - (i+1)) : null;
+        return <LeaderRow key={s2.name} s={s2} i={i} v={v} delta={delta} board={board} isYou={s2.name===currentUser} onClick={()=>setDetail(s2.name)} />;
       })}
       {detailStanding && <PlayerDetailModal standing={detailStanding} onClose={()=>setDetail(null)} />}
-      <p className="helper" style={{ marginTop:14 }}>Tap any pundit for their gameweek-by-gameweek breakdown. Two separate prize pots: <strong>Scores + Team</strong> and <strong>Fantastic Four + Bonus</strong>, plus the combined <strong>Overall</strong> table.{mode==="overall"?" Arrows show movement since last gameweek.":""}</p>
+      <p className="helper" style={{ marginTop:14 }}>Tap any pundit for their gameweek-by-gameweek breakdown. Three prize pots — <strong>Scoreline</strong>, <strong>Fantastic Four</strong> and <strong>Survivor</strong> — plus the combined <strong>Overall</strong> summary (Score + F4 + Bonus).{board!=="survivor" && mode==="overall"?" Arrows show movement since last gameweek.":""}</p>
     </div>
   );
 }
@@ -2463,9 +2606,11 @@ function LeaderboardView({ standings, currentUser, state, users, fpl, fplBusy, o
 function LeaderRow({ s, i, v, delta, board, isYou, onClick }) {
   const rankColor = i===0 ? "var(--yellow)" : i===1 ? "#cfd0d4" : i===2 ? "#d4824a" : "var(--ink-mute)";
   const move = delta==null ? null : delta>0 ? { t:"▲ UP "+delta, c:"var(--accent-2)" } : delta<0 ? { t:"▼ DOWN "+(-delta), c:"var(--red)" } : { t:"— no change", c:"var(--ink-mute)" };
-  const boxes = board==="overall" ? [["SCORES",v.scores],["TEAM",v.team],["F4",v.f4],["BONUS",v.bonus]]
-    : board==="stb" ? [["SCORES",v.scores],["TEAM",v.team]]
-    : [["F4",v.f4],["BONUS",v.bonus]];
+  const boxes = board==="overall" ? [["SCORES",v.scores],["F4",v.f4],["BONUS",v.bonus]]
+    : board==="scoreline" ? [["SCORES",v.scores]]
+    : board==="f4" ? [["F4",v.f4]]
+    : [["ROUNDS",v.rounds]];
+  const totLabel = board==="survivor" ? "ROUND WINS" : "TOTAL PTS";
   return (
     <div className="lb-row" onClick={onClick}>
       <div className="lb-row-rank" style={{ color:rankColor }}>{i>=3?"#":""}{i+1}</div>
@@ -2477,7 +2622,7 @@ function LeaderRow({ s, i, v, delta, board, isYou, onClick }) {
         {boxes.map(([l,val]) => <div key={l} className={"lb-statbox" + (l==="BONUS"?" bonus":"")}><div className="lb-sb-l">{l}</div><div className="lb-sb-v">{val}</div></div>)}
       </div>
       <div className="lb-row-total">
-        <div className="lb-tot-l">TOTAL PTS</div>
+        <div className="lb-tot-l">{totLabel}</div>
         <div className="lb-tot-v">{v.total}</div>
       </div>
     </div>
@@ -2502,12 +2647,12 @@ function PlayerDetailModal({ standing, onClose }) {
             <div className="pd-sum"><div className="pd-sum-l">LOWEST GW</div><div className="pd-sum-v">{lowest}</div></div>
             <div className="pd-sum"><div className="pd-sum-l">AVERAGE</div><div className="pd-sum-v">{avg.toFixed(1)}</div></div>
           </div>
-          <div className="pd-hist-title">Gameweek History</div>
+          <div className="pd-hist-title">Gameweek History (Score + F4 + Bonus)</div>
           {gws.length === 0 ? <div className="empty-mini">No scored gameweeks yet.</div> : (
             <table className="lb-week pd-hist">
-              <thead><tr><th>GW</th><th>Scores</th><th>Team</th><th>F4</th><th>Bonus</th><th>Total</th></tr></thead>
+              <thead><tr><th>GW</th><th>Scores</th><th>F4</th><th>Bonus</th><th>Total</th></tr></thead>
               <tbody>
-                {gws.map(g => { const x = perGW[g]; return <tr key={g}><td>GW{g}</td><td>{x.scores}</td><td>{x.team}</td><td>{x.f4}</td><td>{x.bonus}</td><td className="lb-week-tot">{x.total}</td></tr>; })}
+                {gws.map(g => { const x = perGW[g]; return <tr key={g}><td>GW{g}</td><td>{x.scores}</td><td>{x.f4}</td><td>{x.bonus}</td><td className="lb-week-tot">{x.total}</td></tr>; })}
               </tbody>
             </table>
           )}
@@ -2713,6 +2858,16 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
   const setBonusAnswer = (qid, ans) => updateState(st => ({ ...st, bonus: { ...(st.bonus||{}), [activeGW]: (((st.bonus||{})[activeGW])||[]).map(q => q.id===qid ? { ...q, answer: ans } : q) } }));
   const delBonus = (qid) => updateState(st => ({ ...st, bonus: { ...(st.bonus||{}), [activeGW]: (((st.bonus||{})[activeGW])||[]).filter(q => q.id!==qid) } }));
   const toggleSurvivor = () => updateState(st => ({ ...st, survivorEnabled: !st.survivorEnabled }));
+  const survRounds = computeAllSurvivorRounds(state, users, fpl);
+  const survActive = activeSurvivorRound(survRounds);
+  const startNewRound = () => {
+    if (survActive) { showToast("Finish the current round before starting a new one"); return; }
+    const rounds = (state.survivorRounds || []);
+    const no = rounds.length + 1;
+    const startGW = state.activeGW || 1;
+    updateState(st => ({ ...st, survivorRounds: [ ...((st.survivorRounds)||[]), { id: "r" + Date.now().toString(36), no, startGW } ] }));
+    showToast("Started survivor round " + no + " from GW" + startGW);
+  };
 
   const setActiveGW = (v) => { const n = Math.max(1, Math.min(TOTAL_GW, v)); updateState(s => ({ ...s, activeGW: n })); };
   const toggleOpenGW = (gw) => updateState(s => {
@@ -2761,6 +2916,29 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
           <div style={{ marginTop:16 }}>
             <button className="btn btn-ghost btn-sm" onClick={onRefresh}>↻ Refresh FPL data</button>
           </div>
+        </div>
+
+        <div className="card">
+          <div className="card-title">Survivor</div>
+          <p className="helper" style={{ marginBottom:12 }}>Multi-round knockout. A round runs until 3 or fewer pundits remain (each gets 1 point), or everyone falls the same week (round voids, nobody scores). Start a round when you want the next one to begin — it opens from the current active gameweek and everyone re-enters with all teams reset.</p>
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', marginBottom:14 }}>
+            <button className={"btn btn-sm " + (state.survivorEnabled?"btn-go":"btn-ghost")} onClick={toggleSurvivor}>{state.survivorEnabled ? "✓ Survivor ON" : "Survivor OFF"}</button>
+            <button className="btn btn-primary btn-sm" onClick={startNewRound} disabled={!state.survivorEnabled || !!survActive}>+ Start new round (from GW{activeGW})</button>
+            {survActive && <span className="helper" style={{ margin:0 }}>Round {survActive.no} is live — {survActive.alive.length} alive. Finish it first.</span>}
+          </div>
+          {survRounds.length === 0 ? <div className="empty-mini">No rounds started yet.</div> : (
+            <table className="lb-table"><thead><tr><th>Round</th><th>From</th><th>Status</th><th>Alive / Winners</th></tr></thead>
+            <tbody>
+              {survRounds.map(r => (
+                <tr key={r.id}>
+                  <td style={{ fontWeight:700 }}>R{r.no}</td>
+                  <td>GW{r.startGW}</td>
+                  <td style={{ fontFamily:'JetBrains Mono', fontSize:12 }}>{r.status}</td>
+                  <td>{r.status==="settled" ? ("🏆 " + r.winners.join(", ")) : r.status==="void" ? "— void —" : (r.alive.length + " alive · GW" + r.currentGW)}</td>
+                </tr>
+              ))}
+            </tbody></table>
+          )}
         </div>
 
         <div className="card">
