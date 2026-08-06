@@ -1239,7 +1239,7 @@ function App() {
           <button className={view==="admin"?"active":""} onClick={()=>setView("admin")}>Admin</button>
         </nav>
 
-        {view==="home" && <HomeView state={state} user={user} myPred={myPred} standings={standings} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} setView={setView} goPredict={goPredict} />}
+        {view==="home" && <HomeView state={state} user={user} myPred={myPred} standings={standings} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} setView={setView} goPredict={goPredict} survivorPts={survivorPts} />}
         {view==="predict" && <PredictView state={state} myPred={myPred} users={users} fpl={fpl} updateMyPred={updateMyPred} showToast={showToast} tab={predictTab} setTab={setPredictTab} survivorRounds={survivorRounds} />}
         {view==="fixtures" && <FixturesView state={state} fpl={fpl} />}
         {view==="picks" && <PicksView state={state} users={users} currentUser={user} fpl={fpl} />}
@@ -1397,7 +1397,7 @@ function LoginView({ onLogin, remoteAvailable }) {
   );
 }
 
-function HomeView({ state, user, myPred, standings, fpl, fplBusy, onRefresh, setView, goPredict }) {
+function HomeView({ state, user, myPred, standings, fpl, fplBusy, onRefresh, setView, goPredict, survivorPts }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
 
@@ -1480,7 +1480,7 @@ function HomeView({ state, user, myPred, standings, fpl, fplBusy, onRefresh, set
           <div className="card-title">Your Breakdown <button className="btn btn-ghost btn-sm" onClick={onRefresh} disabled={fplBusy}>{fplBusy?"↻ …":"↻ Refresh"}</button></div>
           <ul className="rules-list">
             <li><span className="rule-name">Score predictions</span><span className="rule-points">{myRow?myRow.breakdown.scores:0}</span></li>
-            <li><span className="rule-name">Team of the week</span><span className="rule-points">{myRow?myRow.breakdown.team:0}</span></li>
+            <li><span className="rule-name">Survivor <span style={{ fontSize:11, color:'var(--ink-mute)' }}>(round wins)</span></span><span className="rule-points">{(survivorPts && survivorPts[user]) || 0}</span></li>
             <li><span className="rule-name">Fantastic Four</span><span className="rule-points">{myRow?myRow.breakdown.f4:0}</span></li>
             <li><span className="rule-name">Bonus questions</span><span className="rule-points">{myRow?(myRow.breakdown.bonus||0):0}</span></li>
             <li style={{ borderTop:'1px solid var(--line)', marginTop:6, paddingTop:12 }}><span className="rule-name" style={{ fontWeight:700 }}>Total</span><span className="rule-points" style={{ color:'var(--accent-2)' }}>{myRow?myRow.total:0}</span></li>
@@ -2348,6 +2348,27 @@ function SurvivorTab({ state, myPred, fpl, survivorRounds, updateMyPred, showToa
   );
 }
 
+function BonusPlayerSelect({ boot, value, onChange, disabled }) {
+  const teams = (boot && boot.teams) ? Object.values(boot.teams).slice().sort((a,b)=>a.name.localeCompare(b.name)) : [];
+  const parseTeam = (v) => { const m = v ? String(v).match(/\(([^)]+)\)\s*$/) : null; return m ? m[1] : ""; };
+  const [team, setTeam] = useState(parseTeam(value));
+  useEffect(() => { const t = parseTeam(value); if (t && t !== team) setTeam(t); }, [value]);
+  const players = (boot && boot.players) ? Object.values(boot.players).filter(pl => pl.teamShort === team).sort((a,b)=>a.name.localeCompare(b.name)) : [];
+  const sel = { background:'var(--bg-2)', border:'1px solid var(--line)', color:'var(--ink)', padding:'10px 12px', borderRadius:6 };
+  return (
+    <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:12 }}>
+      <select value={team} disabled={disabled} onChange={e=>{ setTeam(e.target.value); onChange(""); }} style={{ ...sel, flex:'1 1 140px' }}>
+        <option value="">— team —</option>
+        {teams.map(t => <option key={t.id} value={t.short}>{t.name}</option>)}
+      </select>
+      <select value={value||""} disabled={disabled || !team} onChange={e=>onChange(e.target.value)} style={{ ...sel, flex:'1 1 170px' }}>
+        <option value="">{team ? "— player —" : "pick a team first"}</option>
+        {players.map(pl => { const v = pl.name + " (" + pl.teamShort + ")"; return <option key={pl.id} value={v}>{pl.name}</option>; })}
+      </select>
+    </div>
+  );
+}
+
 function BonusTab({ state, gw, locked, myPred, fpl, updateMyPred, showToast }) {
   const boot = fpl && fpl.boot;
   const questions = (state.bonus && state.bonus[gw]) || [];
@@ -2387,10 +2408,7 @@ function BonusTab({ state, gw, locked, myPred, fpl, updateMyPred, showToast }) {
                 {teamOpts.map(t => <option key={t.id} value={t.short}>{t.name}</option>)}
               </select>
             ) : type==="player" ? (
-              <React.Fragment>
-                <input list={"plbon-"+q.id} value={ans||""} disabled={locked} onChange={e=>setAns(q.id, e.target.value)} placeholder="Start typing a player…" style={fieldStyle} />
-                <datalist id={"plbon-"+q.id}>{playerOpts.map(o => <option key={o} value={o} />)}</datalist>
-              </React.Fragment>
+              <BonusPlayerSelect boot={boot} value={ans||""} disabled={locked} onChange={(v)=>setAns(q.id, v)} />
             ) : (
               <input style={fieldStyle} placeholder="Type your answer" value={ans||""} disabled={locked} onChange={e=>setAns(q.id, e.target.value)} />
             )}
@@ -2868,6 +2886,13 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
     updateState(st => ({ ...st, survivorRounds: [ ...((st.survivorRounds)||[]), { id: "r" + Date.now().toString(36), no, startGW } ] }));
     showToast("Started survivor round " + no + " from GW" + startGW);
   };
+  const removeRound = (id) => {
+    const r = (state.survivorRounds || []).find(x => x.id === id);
+    if (!r) return;
+    if (typeof window !== "undefined" && window.confirm && !window.confirm("Remove survivor round " + r.no + "? Use this to undo a mis-started round. (Picks stay saved but this round won't count.)")) return;
+    updateState(st => ({ ...st, survivorRounds: (st.survivorRounds || []).filter(x => x.id !== id) }));
+    showToast("Removed round " + r.no);
+  };
 
   const setActiveGW = (v) => { const n = Math.max(1, Math.min(TOTAL_GW, v)); updateState(s => ({ ...s, activeGW: n })); };
   const toggleOpenGW = (gw) => updateState(s => {
@@ -2927,7 +2952,7 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
             {survActive && <span className="helper" style={{ margin:0 }}>Round {survActive.no} is live — {survActive.alive.length} alive. Finish it first.</span>}
           </div>
           {survRounds.length === 0 ? <div className="empty-mini">No rounds started yet.</div> : (
-            <table className="lb-table"><thead><tr><th>Round</th><th>From</th><th>Status</th><th>Alive / Winners</th></tr></thead>
+            <table className="lb-table"><thead><tr><th>Round</th><th>From</th><th>Status</th><th>Alive / Winners</th><th></th></tr></thead>
             <tbody>
               {survRounds.map(r => (
                 <tr key={r.id}>
@@ -2935,6 +2960,7 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
                   <td>GW{r.startGW}</td>
                   <td style={{ fontFamily:'JetBrains Mono', fontSize:12 }}>{r.status}</td>
                   <td>{r.status==="settled" ? ("🏆 " + r.winners.join(", ")) : r.status==="void" ? "— void —" : (r.alive.length + " alive · GW" + r.currentGW)}</td>
+                  <td style={{ textAlign:'right' }}><button className="btn btn-danger btn-sm" onClick={()=>removeRound(r.id)}>Remove</button></td>
                 </tr>
               ))}
             </tbody></table>
@@ -3048,10 +3074,7 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
                     {bonusTeamOpts.map(t => <option key={t.id} value={t.short}>{t.name}</option>)}
                   </select>);
                 if (bt === "player") return (
-                  <React.Fragment>
-                    <input list={"pladm-"+q.id} value={q.answer||""} onChange={e=>setBonusAnswer(q.id, e.target.value)} placeholder="settle: pick player" style={ss} />
-                    <datalist id={"pladm-"+q.id}>{bonusPlayerOpts.map(o => <option key={o} value={o} />)}</datalist>
-                  </React.Fragment>);
+                  <BonusPlayerSelect boot={boot} value={q.answer||""} onChange={(v)=>setBonusAnswer(q.id, v)} />);
                 if (q.options && q.options.length) return (
                   <select value={q.answer||""} onChange={e=>setBonusAnswer(q.id, e.target.value)} style={ss}>
                     <option value="">— not settled —</option>
