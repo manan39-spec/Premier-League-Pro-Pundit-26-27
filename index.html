@@ -50,6 +50,14 @@
   .bb-btn:hover { color:var(--ink); }
   .bb-btn.active { color:var(--accent); background:rgba(233,0,82,0.10); }
   .team-chip.sv-disabled { opacity:0.4; cursor:not-allowed; }
+  .pk-exact { background:rgba(0,255,135,0.18); }
+  .pk-outcome { background:rgba(255,212,59,0.16); }
+  .pk-wrong { background:rgba(233,0,82,0.14); }
+  .pk-good { background:rgba(0,255,135,0.18); }
+  .pk-bad { background:rgba(233,0,82,0.14); }
+  .pk-legend { display:flex; gap:14px; flex-wrap:wrap; font-family:'JetBrains Mono', monospace; font-size:10px; color:var(--ink-mute); margin-top:10px; }
+  .pk-legend span { display:inline-flex; align-items:center; gap:5px; }
+  .pk-dot { width:10px; height:10px; border-radius:2px; display:inline-block; }
   .team-chip.sv-disabled:hover { border-color:var(--line); }
   .lb-compact th, .lb-compact td { padding:11px 12px; }
   .lb-move { font-family:'JetBrains Mono', monospace; font-size:11px; font-weight:700; }
@@ -2441,25 +2449,37 @@ function PicksView({ state, users, currentUser, fpl }) {
     return (
       <div>
         <div className="page-head"><div className="eyebrow">EVERYONE'S PICKS</div><h1 className="page-title">THE <span className="it">picks.</span></h1></div>
-        <div className="empty"><div className="empty-title">NOTHING LOCKED YET</div><p>Picks stay hidden until the admin locks a gameweek. Once a GW is locked, everyone's predictions show up here.</p></div>
+        <div className="empty"><div className="empty-title">NOTHING LOCKED YET</div><p>Picks stay hidden until the admin locks a gameweek. Once a GW is locked, everyone's predictions show up here with results.</p></div>
       </div>
     );
   }
 
   const fixtures = (fpl.fixturesByGW && fpl.fixturesByGW[gw]) || [];
   const boot = fpl.boot;
+  const live = (fpl.liveByGW && fpl.liveByGW[gw]) || {};
   const selIds = (state.selectedFixtures && state.selectedFixtures[gw]) || [];
   const selFixtures = selIds.map(id => fixtures.find(f => String(f.id)===String(id))).filter(Boolean);
   const players = (boot && boot.players) || {};
   const named = (users || []).filter(u => u.name).sort((a,b)=>a.name.localeCompare(b.name));
   const bonusQs = (state.bonus && state.bonus[gw]) || [];
 
+  const scoreCellClass = (pred, f) => {
+    if (!f.finished || f.hScore == null) return "";
+    const p = parseScore(pred); if (!p) return "";
+    const ph = p[0], pa = p[1], ah = f.hScore, aa = f.aScore;
+    if (ph === ah && pa === aa) return "pk-exact";
+    const so = ph>pa?1:ph<pa?-1:0, ao = ah>aa?1:ah<aa?-1:0;
+    return so === ao ? "pk-outcome" : "pk-wrong";
+  };
+  const pp = id => (id != null && live[id] != null) ? Number(live[id]) : null;
+  const nm = id => (id != null && players[id]) ? players[id].name : "—";
+
   return (
     <div>
       <div className="page-head">
         <div className="eyebrow">EVERYONE'S PICKS · LOCKED</div>
         <h1 className="page-title">THE <span className="it">picks.</span></h1>
-        <p className="page-sub">All predictions for locked gameweeks, out in the open.</p>
+        <p className="page-sub">All predictions for locked gameweeks, with results — green = right, red = wrong.</p>
       </div>
       <div className="field" style={{ maxWidth:220 }}>
         <label>Gameweek</label>
@@ -2472,69 +2492,66 @@ function PicksView({ state, users, currentUser, fpl }) {
         <div className="card-title">Score Predictions</div>
         {selFixtures.length === 0 ? <div className="empty-mini">No fixtures were selected for this GW.</div> : (
           <table className="lb-table" style={{ minWidth:520 }}>
-            <thead><tr><th>Pundit</th>{selFixtures.map(f => <th key={f.id} style={{textAlign:'center'}}>{f.teamH}v{f.teamA}</th>)}</tr></thead>
+            <thead><tr><th>Pundit</th>{selFixtures.map(f => <th key={f.id} style={{textAlign:'center'}}>{f.teamH} {f.finished ? (f.hScore+"-"+f.aScore) : "v"} {f.teamA}</th>)}</tr></thead>
             <tbody>
               {named.map(u => {
                 const preds = (u.scores && u.scores[gw]) || {};
                 return <tr key={u.name}><td style={{fontWeight:600}}>{u.name}{u.name===currentUser?" · you":""}</td>
-                  {selFixtures.map(f => <td key={f.id} style={{textAlign:'center', fontFamily:'JetBrains Mono'}}>{preds[f.id]||"—"}</td>)}
+                  {selFixtures.map(f => { const cls = scoreCellClass(preds[f.id], f); return <td key={f.id} className={cls} style={{textAlign:'center', fontFamily:'JetBrains Mono'}}>{preds[f.id]||"—"}</td>; })}
                 </tr>;
               })}
             </tbody>
           </table>
         )}
+        <div className="pk-legend"><span><span className="pk-dot" style={{background:'var(--accent-2)'}}></span>Exact score</span><span><span className="pk-dot" style={{background:'var(--yellow)'}}></span>Right result</span><span><span className="pk-dot" style={{background:'var(--red)'}}></span>Wrong</span></div>
       </div>
 
       <div className="grid grid-2">
         <div className="card">
           <div className="card-title">Survivor</div>
           <table className="lb-table">
-            <thead><tr><th>Pundit</th><th>Pick</th></tr></thead>
+            <thead><tr><th>Pundit</th><th>Pick</th><th>Result</th></tr></thead>
             <tbody>
-              {named.map(u => { const sp = (u.survivor && u.survivor[gw]) || null;
+              {named.map(u => {
+                const sp = (u.survivor && u.survivor[gw]) || null;
+                const r = sp ? teamSurvives(sp, gw, fixtures) : null;
+                const cls = (r && r.decided) ? (r.survives ? "pk-good" : "pk-bad") : "";
                 return <tr key={u.name}><td style={{fontWeight:600}}>{u.name}{u.name===currentUser?" · you":""}</td>
-                  <td style={{fontFamily:'JetBrains Mono'}}>{sp || "—"}</td></tr>;
+                  <td style={{fontFamily:'JetBrains Mono'}}>{sp || "—"}</td>
+                  <td className={cls} style={{fontFamily:'JetBrains Mono', fontSize:12}}>{(r && r.decided) ? (r.survives ? "✓ won" : "✗ out") : (sp ? "—" : "")}</td></tr>;
               })}
             </tbody>
           </table>
         </div>
-        <div className="card">
+        <div className="card" style={{ overflowX:'auto' }}>
           <div className="card-title">Fantastic Four</div>
-          <table className="lb-table">
-            <thead><tr><th>Pundit</th><th>GK</th><th>DEF</th><th>MID</th><th>FWD</th></tr></thead>
+          <table className="lb-table" style={{ minWidth:420 }}>
+            <thead><tr><th>Pundit</th><th>GK</th><th>DEF</th><th>MID</th><th>FWD</th><th>Pts</th></tr></thead>
             <tbody>
-              {named.map(u => { const f4 = (u.f4 && u.f4[gw]) || {};
-                const nm = id => id && players[id] ? players[id].name : "—";
+              {named.map(u => {
+                const f4 = (u.f4 && u.f4[gw]) || {};
+                const ids = [f4.gk, f4.def, f4.mid, f4.fwd];
+                const tot = ids.reduce((a,id)=>a+(pp(id)||0), 0);
+                const cell = (id,key) => { const v = pp(id); return <td key={key} className={v>0?"pk-good":""}>{nm(id)}{v!=null?(" "+v):""}</td>; };
                 return <tr key={u.name}><td style={{fontWeight:600}}>{u.name}{u.name===currentUser?" · you":""}</td>
-                  <td>{nm(f4.gk)}</td><td>{nm(f4.def)}</td><td>{nm(f4.mid)}</td><td>{nm(f4.fwd)}</td></tr>;
+                  {cell(f4.gk,"gk")}{cell(f4.def,"def")}{cell(f4.mid,"mid")}{cell(f4.fwd,"fwd")}
+                  <td style={{fontFamily:'Anton', color:'var(--accent-2)'}}>{tot}</td></tr>;
               })}
             </tbody>
           </table>
         </div>
       </div>
-      {state.survivorEnabled && (
-        <div className="card" style={{ marginTop:18 }}>
-          <div className="card-title">Survivor picks</div>
-          <table className="lb-table">
-            <thead><tr><th>Pundit</th><th>Pick</th></tr></thead>
-            <tbody>
-              {named.map(u => { const sp = (u.survivor && u.survivor[gw]) || null;
-                return <tr key={u.name}><td style={{fontWeight:600}}>{u.name}{u.name===currentUser?" · you":""}</td>
-                  <td style={{fontFamily:'JetBrains Mono'}}>{sp && sp.team ? sp.team : "—"}</td></tr>;
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+
       {bonusQs.length > 0 && (
         <div className="card" style={{ marginTop:18, overflowX:'auto' }}>
           <div className="card-title">Bonus answers</div>
           <table className="lb-table" style={{ minWidth:480 }}>
-            <thead><tr><th>Pundit</th>{bonusQs.map(q => <th key={q.id}>{q.text}</th>)}</tr></thead>
+            <thead><tr><th>Pundit</th>{bonusQs.map(q => <th key={q.id}>{q.text}{q.answer!=null && q.answer!=="" ? (" → " + q.answer) : ""}</th>)}</tr></thead>
             <tbody>
-              {named.map(u => { const ba = (u.bonusAnswers && u.bonusAnswers[gw]) || {};
+              {named.map(u => {
+                const ba = (u.bonusAnswers && u.bonusAnswers[gw]) || {};
                 return <tr key={u.name}><td style={{fontWeight:600}}>{u.name}{u.name===currentUser?" · you":""}</td>
-                  {bonusQs.map(q => <td key={q.id} style={{fontFamily:'JetBrains Mono'}}>{ba[q.id]!=null && ba[q.id]!==""?ba[q.id]:"—"}</td>)}</tr>;
+                  {bonusQs.map(q => { const a = ba[q.id]; const settled = q.answer != null && q.answer !== ""; const has = a != null && a !== ""; const cls = (settled && has) ? (String(a)===String(q.answer) ? "pk-good" : "pk-bad") : ""; return <td key={q.id} className={cls} style={{fontFamily:'JetBrains Mono'}}>{has ? a : "—"}</td>; })}</tr>;
               })}
             </tbody>
           </table>
