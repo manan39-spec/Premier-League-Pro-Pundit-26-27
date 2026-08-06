@@ -411,6 +411,23 @@
     .lb-sb-v { font-size:17px; }
     .pd-summary { grid-template-columns:repeat(2,1fr); }
   }
+  .pl-table { width:100%; border-collapse:collapse; min-width:520px; }
+  .pl-table th { font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:0.05em; color:var(--ink-mute); text-transform:uppercase; text-align:center; padding:11px 8px; border-bottom:1px solid var(--line); }
+  .pl-table th.pl-club { text-align:left; }
+  .pl-table td { text-align:center; padding:10px 8px; border-bottom:1px solid var(--line); font-family:'JetBrains Mono', monospace; font-size:13px; color:var(--ink-dim); }
+  .pl-table td.pl-pos { color:var(--ink-mute); width:34px; }
+  .pl-table td.pl-club { text-align:left; }
+  .pl-club { display:flex; align-items:center; gap:9px; }
+  .pl-nm { font-family:'Inter Tight', sans-serif; font-weight:600; font-size:14px; color:var(--ink); }
+  .pl-table td.pl-pts { color:var(--ink); font-weight:700; font-family:'Anton', sans-serif; font-size:17px; }
+  .pl-row.ucl td.pl-pos { box-shadow: inset 3px 0 0 var(--accent-2); }
+  .pl-row.rel td.pl-pos { box-shadow: inset 3px 0 0 var(--red); }
+  .pl-key { display:flex; gap:16px; flex-wrap:wrap; font-family:'JetBrains Mono', monospace; font-size:11px; color:var(--ink-mute); }
+  .pl-key-item { display:flex; align-items:center; gap:6px; }
+  .pl-dot { width:10px; height:10px; border-radius:2px; display:inline-block; }
+  .pl-dot.ucl { background:var(--accent-2); }
+  .pl-dot.rel { background:var(--red); }
+  @media (max-width:560px){ .pl-hide { display:none; } .pl-table { min-width:360px; } }
 </style>
 </head>
 <body>
@@ -628,7 +645,11 @@ async function fplAllFixtures(force) {
 // CONSTANTS
 // ============================================================
 const ADMIN_USERNAME = "PPADMIN";
-const ADMIN_PASSWORD = "Propundit007!@";     // change before sharing publicly
+const ADMIN_PASSWORD = "Propundit007!@";     // fallback admin passcode (used only if ADMIN_EMAILS is empty)
+// Google emails that get admin access automatically (no passcode). Add your own
+// Google email here to make admin fully passwordless. If left empty, the passcode
+// above is used as a fallback so you're never locked out.
+const ADMIN_EMAILS = [];
 const EXPORT_LOGINS = [
   { username: "PPDATA", password: "Ppdata2026!@" },
 ];
@@ -1036,6 +1057,27 @@ function App() {
   }, [showToast]);
 
   // ---- account + admin user management (write/delete pp_pred:<name> records) ----
+  const changeDisplayName = useCallback(async (newName) => {
+    const clean = (newName || "").trim();
+    if (!clean) return { ok:false, msg:"Enter a display name" };
+    if (clean.length > 30) return { ok:false, msg:"Keep the name under 30 characters" };
+    if (!user) return { ok:false, msg:"Not signed in" };
+    if (clean === user) return { ok:true };
+    const exists = await getShared("pp_pred:" + clean);
+    if (exists) return { ok:false, msg:"That name is taken — pick another" };
+    const rec = await getShared("pp_pred:" + user);
+    if (!rec) return { ok:false, msg:"Account not found — refresh and try again" };
+    await setShared("pp_pred:" + clean, { ...rec, name: clean });
+    if (rec.googleSub) await setShared("pp_google:" + rec.googleSub, { name: clean });
+    const oldKey = "pp_pred:" + user;
+    if (apiReady) await remoteDeleteKeys([oldKey]);
+    try { localStorage.removeItem(oldKey); } catch {}
+    setPersonal("current_user", clean);
+    setUser(clean);
+    await loadUsers();
+    return { ok:true };
+  }, [user, loadUsers]);
+
   const changeMyPassword = useCallback(async (oldPw, newPw) => {
     if (!user) return { ok:false, msg:"Not signed in" };
     const rec = await getShared("pp_pred:" + user);
@@ -1105,7 +1147,7 @@ function App() {
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
             <button className="theme-toggle" onClick={toggleTheme} title="Toggle day / night mode" aria-label="Toggle day or night mode">{theme==="light" ? "🌙" : "☀️"}</button>
-            <div className="user-pill"><span className="dot"></span><span>{user}</span><button onClick={()=>setShowAccount(true)}>password</button><button onClick={logout}>switch</button></div>
+            <div className="user-pill"><span className="dot"></span><span>{user}</span><button onClick={()=>setShowAccount(true)}>account</button><button onClick={logout}>switch</button></div>
           </div>
         </header>
         <nav className="nav">
@@ -1124,7 +1166,7 @@ function App() {
         {view==="picks" && <PicksView state={state} users={users} currentUser={user} fpl={fpl} />}
         {view==="leaderboard" && <LeaderboardView standings={standings} currentUser={user} state={state} users={users} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} />}
         {view==="rules" && <RulesView state={state} />}
-        {view==="admin" && <AdminView state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} isAdmin={isAdmin} setIsAdmin={setIsAdmin} adminRole={adminRole} setAdminRole={setAdminRole} showToast={showToast} onRefresh={()=>refreshAll(true)} adminAddUser={adminAddUser} adminSetPassword={adminSetPassword} adminDeleteUser={adminDeleteUser} />}
+        {view==="admin" && <AdminView state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} isAdmin={isAdmin} setIsAdmin={setIsAdmin} adminRole={adminRole} setAdminRole={setAdminRole} showToast={showToast} onRefresh={()=>refreshAll(true)} adminAddUser={adminAddUser} adminSetPassword={adminSetPassword} adminDeleteUser={adminDeleteUser} iAmAdmin={!!(myPred && myPred.email && ADMIN_EMAILS.some(e=>e && e.toLowerCase()===String(myPred.email).toLowerCase()))} />}
 
         <footer className="app-footer">
           Pro Pundit League · <span className="accent">Season 6</span> · Put those pundit hats on
@@ -1132,7 +1174,7 @@ function App() {
         </footer>
       </div>
       <BottomNav view={view} predictTab={predictTab} goPredict={goPredict} survivorEnabled={state.survivorEnabled} />
-      {showAccount && <AccountModal user={user} onClose={()=>setShowAccount(false)} changeMyPassword={changeMyPassword} showToast={showToast} myPred={myPred} />}
+      {showAccount && <AccountModal user={user} onClose={()=>setShowAccount(false)} changeDisplayName={changeDisplayName} showToast={showToast} myPred={myPred} />}
       {toast && <div className="toast">{toast}</div>}
     </>
   );
@@ -1141,6 +1183,19 @@ function App() {
 // ============================================================
 // LOGIN
 // ============================================================
+// Google-only: map a verified Google identity to a display name (create or claim).
+async function googleClaimName(g, name) {
+  const clean = (name || "").trim();
+  if (!clean) return { ok:false, error:"Enter a display name" };
+  if (clean.length > 30) return { ok:false, error:"Keep the name under 30 characters" };
+  const existing = await getShared("pp_pred:" + clean);
+  const write = async (rec) => { await setShared("pp_pred:" + clean, rec); await setShared("pp_google:" + g.sub, { name: clean }); return { ok:true, name: clean }; };
+  if (!existing) return write({ name: clean, joined: Date.now(), googleSub: g.sub, email: g.email, scores:{}, teamPick:{}, f4:{}, survivor:{}, bonusAnswers:{} });
+  if (existing.googleSub && existing.googleSub === g.sub) return write({ ...existing, email: g.email });
+  if (existing.googleSub && existing.googleSub !== g.sub) return { ok:false, error:"That name is taken — pick another." };
+  return write({ ...existing, googleSub: g.sub, email: g.email });   // claim a legacy (no-Google) name, keep picks
+}
+
 function GoogleButton({ onCredential, text }) {
   const ref = useRef(null);
   _gsiHandlerRef.current = onCredential;   // keep the active handler current
@@ -1165,50 +1220,33 @@ function GoogleButton({ onCredential, text }) {
   return <div ref={ref} style={{ display:'flex', justifyContent:'center', minHeight:44 }} />;
 }
 
-function AccountModal({ user, onClose, changeMyPassword, showToast, myPred }) {
-  const [cur, setCur] = useState(""); const [nw, setNw] = useState(""); const [nw2, setNw2] = useState("");
+function AccountModal({ user, onClose, changeDisplayName, showToast, myPred }) {
+  const [nm, setNm] = useState(user || "");
   const [busy, setBusy] = useState(false); const [err, setErr] = useState("");
   const submit = async () => {
     setErr("");
-    if (nw.length < 4) { setErr("New password must be at least 4 characters"); return; }
-    if (nw !== nw2) { setErr("New passwords don't match"); return; }
+    const clean = nm.trim();
+    if (!clean) { setErr("Enter a display name"); return; }
+    if (clean === user) { onClose(); return; }
     setBusy(true);
-    const r = await changeMyPassword(cur, nw);
+    const r = await changeDisplayName(clean);
     setBusy(false);
-    if (r && r.ok) { showToast("Password updated"); onClose(); }
-    else setErr((r && r.msg) || "Couldn't update password");
-  };
-  const handleLinkGoogle = async (resp) => {
-    if (!resp || !resp.credential) return;
-    const v = await verifyGoogleCredential(resp.credential);
-    if (!v || !v.ok || !v.sub) { showToast("Google verification failed"); return; }
-    const r = await googleLinkTo(user, { sub: v.sub, email: v.email || "" });
-    if (r.ok) { showToast("Google account linked ✓"); onClose(); }
-    else showToast(r.error || "Couldn't link Google");
+    if (r && r.ok) { showToast("Display name updated"); onClose(); }
+    else setErr((r && r.msg) || "Couldn't update name");
   };
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth:440 }} onClick={e=>e.stopPropagation()}>
         <div className="modal-head"><h3>Your account</h3><button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button></div>
         <div className="modal-body">
-          <p className="helper" style={{ marginTop:0, marginBottom:14 }}>Signed in as <strong style={{color:'var(--ink)'}}>{user}</strong>. Set a new password below.</p>
-          <div className="field"><label>Current password</label><input type="password" value={cur} onChange={e=>setCur(e.target.value)} placeholder="Leave blank if you never set one" /></div>
-          <div className="field"><label>New password</label><input type="password" value={nw} onChange={e=>setNw(e.target.value)} placeholder="Min 4 characters" /></div>
-          <div className="field"><label>Confirm new password</label><input type="password" value={nw2} onChange={e=>setNw2(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="Type it again" /></div>
-          {err && <div style={{ color:'var(--red)', fontSize:13 }}>{err}</div>}
-          {GOOGLE_CLIENT_ID ? (
-            <React.Fragment>
-              <div className="divider" style={{ margin:'18px 0' }}></div>
-              <label style={{ fontFamily:'JetBrains Mono', fontSize:10, color:'var(--ink-mute)', letterSpacing:'0.15em', textTransform:'uppercase' }}>Google sign-in</label>
-              {myPred && myPred.googleSub
-                ? <p className="helper" style={{ marginTop:6 }}>✓ Your Google account is linked — you can sign in with Google next time.</p>
-                : <div style={{ marginTop:8 }}><p className="helper" style={{ marginBottom:10 }}>Link your Google account to sign in with one tap next time.</p><GoogleButton onCredential={handleLinkGoogle} text="continue_with" /></div>}
-            </React.Fragment>
-          ) : null}
+          <p className="helper" style={{ marginTop:0, marginBottom:14 }}>Signed in with Google{myPred && myPred.email ? <> as <strong style={{color:'var(--ink)'}}>{myPred.email}</strong></> : ""}.</p>
+          <div className="field"><label>Display name</label><input type="text" value={nm} onChange={e=>setNm(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="How you appear on the leaderboard" /></div>
+          <div className="helper">Changing this renames you everywhere — your picks and points come with you.</div>
+          {err && <div style={{ color:'var(--red)', fontSize:13, marginTop:8 }}>{err}</div>}
         </div>
         <div className="modal-foot">
           <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary btn-sm" onClick={submit} disabled={busy}>{busy?"Saving…":"Update password"}</button>
+          <button className="btn btn-primary btn-sm" onClick={submit} disabled={busy}>{busy?"Saving…":"Save name"}</button>
         </div>
       </div>
     </div>
@@ -1216,45 +1254,11 @@ function AccountModal({ user, onClose, changeMyPassword, showToast, myPred }) {
 }
 
 function LoginView({ onLogin, remoteAvailable }) {
-  const [step, setStep] = useState("name");
+  const [step, setStep] = useState("google");   // google | name
   const [name, setName] = useState("");
-  const [pw, setPw] = useState(""); const [pw2, setPw2] = useState("");
   const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
   const [googleAuth, setGoogleAuth] = useState(null);
-  const clean = name.trim();
 
-  const checkName = async () => {
-    if (!clean) { setError("Enter a name first"); return; }
-    if (clean.length > 30) { setError("Keep it under 30 characters"); return; }
-    setBusy(true); setError("");
-    const existing = await getShared("pp_pred:" + clean);
-    setBusy(false);
-    if (!existing) setStep("signup");
-    else if (!existing.passwordHash) setStep("claim");
-    else setStep("signin");
-  };
-  const doSignin = async () => {
-    setBusy(true); setError("");
-    const existing = await getShared("pp_pred:" + clean);
-    if (!existing) { setError("Account vanished — refresh and try again"); setBusy(false); return; }
-    const hash = await hashPassword(pw, existing.salt);
-    setBusy(false);
-    if (hash !== existing.passwordHash) { setError("Wrong password. Ask the admin to reset if you forgot."); return; }
-    onLogin(clean);
-  };
-  const doSignupOrClaim = async () => {
-    if (pw.length < 4) { setError("Password should be at least 4 characters"); return; }
-    if (pw !== pw2) { setError("Passwords don't match"); return; }
-    setBusy(true); setError("");
-    if (step === "signup") { await setShared("pp_pred:" + clean, await makeUserRecord(clean, pw)); }
-    else {
-      const existing = await getShared("pp_pred:" + clean);
-      if (!existing) { setError("Account vanished — refresh"); setBusy(false); return; }
-      const salt = makeSalt(); const passwordHash = await hashPassword(pw, salt);
-      await setShared("pp_pred:" + clean, { ...existing, salt, passwordHash });
-    }
-    setBusy(false); onLogin(clean);
-  };
   const handleGoogle = async (resp) => {
     if (!resp || !resp.credential) return;
     setBusy(true); setError("");
@@ -1263,16 +1267,15 @@ function LoginView({ onLogin, remoteAvailable }) {
     const found = await googleFindAccount(v.sub);
     if (found.ok) { setBusy(false); onLogin(found.name); return; }
     setGoogleAuth({ sub: v.sub, email: v.email || "", gname: v.name || "" });
-    setName((v.name || "").slice(0, 30)); setPw(""); setBusy(false); setStep("google-name");
+    setName((v.name || "").slice(0, 30)); setBusy(false); setStep("name");
   };
-  const finishGoogle = async () => {
-    if (!googleAuth) { setStep("name"); setError("Google session expired — start again."); return; }
+  const finishName = async () => {
+    if (!googleAuth) { setStep("google"); setError("Google session expired — sign in again."); return; }
     setBusy(true); setError("");
-    const r = await googleCreateOrLink(googleAuth, name, pw);
+    const r = await googleClaimName(googleAuth, name);
     setBusy(false);
-    if (r.ok) onLogin(r.name); else setError(r.error || "Couldn't finish Google sign-in");
+    if (r.ok) onLogin(r.name); else setError(r.error || "Couldn't finish sign-in");
   };
-  const goBack = () => { setStep("name"); setPw(""); setPw2(""); setError(""); setGoogleAuth(null); };
 
   return (
     <div className="app">
@@ -1281,70 +1284,31 @@ function LoginView({ onLogin, remoteAvailable }) {
           <div className="eyebrow">PREMIER LEAGUE · {new Date().getFullYear()} · SEASON 6</div>
           <div className="login-title">PRO <span className="it">pundit.</span></div>
           <p className="login-sub">
-            {step === "name" && <>Welcome back to the sixth season of Pro Pundit. The stage is set — put those pundit hats on and let the game begin. Score predictions, team of the week, and the Fantastic Four await.</>}
-            {step === "signin" && <>Welcome back, <strong style={{ color: 'var(--accent)' }}>{clean}</strong>. Enter your password to make your picks.</>}
-            {step === "claim" && <><strong style={{ color: 'var(--accent)' }}>{clean}</strong> exists but has no password yet. Set one now to protect your picks.</>}
-            {step === "signup" && <>New pundit. Pick a password — you'll need it every time you sign in, and the admin can reset it if you forget.</>}
-            {step === "google-name" && <>Signed in with Google{googleAuth && googleAuth.email ? <> as <strong style={{ color:'var(--accent)' }}>{googleAuth.email}</strong></> : ""}. Pick your league name to finish.</>}
+            {step === "google" && <>Welcome to the sixth season of Pro Pundit. Sign in with Google to make your picks — score predictions, team of the week, the Fantastic Four and bonus questions await.</>}
+            {step === "name" && <>Signed in with Google{googleAuth && googleAuth.email ? <> as <strong style={{ color:'var(--accent)' }}>{googleAuth.email}</strong></> : ""}. Now pick the display name you'll show up as on the leaderboard — it can be anything, it doesn't have to match your Google name.</>}
           </p>
           {!remoteAvailable && (
-            <div className="lock-banner" style={{ borderColor: 'rgba(255,77,77,0.3)', color: 'var(--red)' }}>
-              ⚠️ Shared storage is offline. Picks only save on this device until /api/store + Upstash Redis are linked in Vercel.
+            <div className="lock-banner" style={{ borderColor: 'rgba(255,77,77,0.3)', color: 'var(--red)' }}>⚠️ Shared storage is offline. Picks only save on this device until /api/store + Upstash Redis are linked in Vercel.</div>
+          )}
+          {!GOOGLE_CLIENT_ID && (
+            <div className="lock-banner" style={{ borderColor: 'rgba(255,77,77,0.3)', color: 'var(--red)' }}>⚠️ Google sign-in isn't configured yet. Set GOOGLE_CLIENT_ID (and the Vercel env var) to enable login.</div>
+          )}
+          {step === "google" && (
+            <div style={{ marginTop:8 }}>
+              {error && <div style={{ color:'var(--red)', fontSize:13, marginBottom:12 }}>{error}</div>}
+              {GOOGLE_CLIENT_ID ? <GoogleButton onCredential={handleGoogle} text="signin_with" /> : null}
+              {busy && <p className="helper" style={{ marginTop:12 }}>Signing you in…</p>}
             </div>
           )}
           {step === "name" && (
             <>
               <div className="field">
-                <label>Your name</label>
-                <input type="text" placeholder="e.g. Pranav, Karan, Manan…" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&checkName()} autoFocus disabled={busy} />
-                <div className="helper">Use the same name every time — it's how your picks stay attached to you across devices.</div>
-              </div>
-              {error && <div style={{ color:'var(--red)', fontSize:13, marginBottom:12 }}>{error}</div>}
-              <button className="btn btn-primary" onClick={checkName} disabled={busy} style={{ width:'100%', justifyContent:'center', padding:'14px' }}>{busy?"Checking…":"Continue →"}</button>
-              {GOOGLE_CLIENT_ID ? (<React.Fragment><div className="or-divider"><span>or</span></div><GoogleButton onCredential={handleGoogle} text="continue_with" /></React.Fragment>) : null}
-            </>
-          )}
-          {step === "signin" && (
-            <>
-              <div className="field"><label>Password</label>
-                <input type="password" placeholder="Your password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doSignin()} autoFocus disabled={busy} /></div>
-              {error && <div style={{ color:'var(--red)', fontSize:13, marginBottom:12 }}>{error}</div>}
-              <div style={{ display:'flex', gap:8 }}>
-                <button className="btn btn-ghost" onClick={goBack} disabled={busy}>← Back</button>
-                <button className="btn btn-primary" onClick={doSignin} disabled={busy} style={{ flex:1, justifyContent:'center' }}>{busy?"Verifying…":"Sign in →"}</button>
-              </div>
-            </>
-          )}
-          {(step==="claim"||step==="signup") && (
-            <>
-              <div className="field"><label>{step==="claim"?"Set a password":"Create a password"}</label>
-                <input type="password" placeholder="Min 4 characters" value={pw} onChange={e=>setPw(e.target.value)} autoFocus disabled={busy} /></div>
-              <div className="field"><label>Confirm password</label>
-                <input type="password" placeholder="Type it again" value={pw2} onChange={e=>setPw2(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doSignupOrClaim()} disabled={busy} />
-                <div className="helper">Write it down. Admin can reset it, but it's easier not to lose it.</div></div>
-              {error && <div style={{ color:'var(--red)', fontSize:13, marginBottom:12 }}>{error}</div>}
-              <div style={{ display:'flex', gap:8 }}>
-                <button className="btn btn-ghost" onClick={goBack} disabled={busy}>← Back</button>
-                <button className="btn btn-primary" onClick={doSignupOrClaim} disabled={busy} style={{ flex:1, justifyContent:'center' }}>{busy?"Setting up…":step==="signup"?"Join the league →":"Save & sign in →"}</button>
-              </div>
-            </>
-          )}
-          {step === "google-name" && (
-            <>
-              <div className="field">
                 <label>Display name for the league</label>
-                <input type="text" placeholder="Your name" value={name} onChange={e=>setName(e.target.value)} autoFocus disabled={busy} />
-                <div className="helper">This is how you'll show up on the leaderboard. Already play under a name that has a password? Type that exact name and enter its password below to link Google to it.</div>
-              </div>
-              <div className="field">
-                <label>Existing password (only if linking an existing name)</label>
-                <input type="password" placeholder="Leave blank for a brand-new account" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&finishGoogle()} disabled={busy} />
+                <input type="text" placeholder="Your name" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&finishName()} autoFocus disabled={busy} />
+                <div className="helper">This is how you'll appear on the leaderboard. You can change it later from your account.</div>
               </div>
               {error && <div style={{ color:'var(--red)', fontSize:13, marginBottom:12 }}>{error}</div>}
-              <div style={{ display:'flex', gap:8 }}>
-                <button className="btn btn-ghost" onClick={goBack} disabled={busy}>← Back</button>
-                <button className="btn btn-primary" onClick={finishGoogle} disabled={busy} style={{ flex:1, justifyContent:'center' }}>{busy?"Setting up…":"Continue →"}</button>
-              </div>
+              <button className="btn btn-primary" onClick={finishName} disabled={busy} style={{ width:'100%', justifyContent:'center', padding:'14px' }}>{busy?"Setting up…":"Enter the league →"}</button>
             </>
           )}
           <div className="login-footer">Pro Pundit League · <span className="accent">Season 6</span><div>© {new Date().getFullYear()} Pro Pundit League</div></div>
@@ -1354,9 +1318,6 @@ function LoginView({ onLogin, remoteAvailable }) {
   );
 }
 
-// ============================================================
-// HOME
-// ============================================================
 function HomeView({ state, user, myPred, standings, fpl, fplBusy, onRefresh, setView, goPredict }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
@@ -1499,7 +1460,7 @@ function RulesView({ state }) {
         <div className="card">
           <div className="card-title">Bonus Questions</div>
           <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Some gameweeks the admin posts a few bonus questions — yes/no or multiple choice. Answer before the deadline; points land once the admin settles the correct answer.</p>
-           <p className="helper" style={{ marginTop:10 }}>Bonus points roll into your Fantastic Four total.</p>
+          <p className="helper" style={{ marginTop:10 }}>Bonus points roll into your Fantastic Four + Bonus prize pot.</p>
         </div>
       </div>
     </div>
@@ -1592,6 +1553,70 @@ function buildFdrRows(teams, allFixtures) {
   return { byTeam, gwDate };
 }
 
+// Standard PL table computed from finished results. uptoGW=null -> whole season so far;
+// pass a number to get the table "as of" that gameweek (used by survivor's bottom-3 rule).
+function buildLeagueTable(teams, allFixtures, uptoGW) {
+  const row = {};
+  (teams || []).forEach(t => { row[t.short] = { short:t.short, name:t.name, code:t.code, id:t.id, played:0, win:0, draw:0, loss:0, gf:0, ga:0, gd:0, pts:0 }; });
+  (allFixtures || []).forEach(f => {
+    if (!f.finished || f.hScore == null || f.aScore == null) return;
+    if (uptoGW != null && f.gw != null && f.gw > uptoGW) return;
+    const H = row[f.teamH], A = row[f.teamA];
+    if (!H || !A) return;
+    H.played++; A.played++;
+    H.gf += f.hScore; H.ga += f.aScore; A.gf += f.aScore; A.ga += f.hScore;
+    if (f.hScore > f.aScore) { H.win++; H.pts += 3; A.loss++; }
+    else if (f.hScore < f.aScore) { A.win++; A.pts += 3; H.loss++; }
+    else { H.draw++; A.draw++; H.pts++; A.pts++; }
+  });
+  const rows = Object.values(row);
+  rows.forEach(r => { r.gd = r.gf - r.ga; });
+  rows.sort((a,b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf || a.name.localeCompare(b.name));
+  rows.forEach((r,i) => { r.position = i+1; });
+  return rows;
+}
+
+function PLTable({ state, fpl }) {
+  const boot = fpl.boot;
+  const [all, setAll] = useState(null);
+  useEffect(() => { let alive=true; fplAllFixtures().then(fx => { if (alive) setAll(fx||[]); }).catch(()=>{ if(alive) setAll([]); }); return ()=>{alive=false;}; }, []);
+  if (!boot || !boot.teams) return <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>⚠️ Couldn't load FPL data. The table works once deployed on Vercel; if you're live, hit Refresh on the Home tab.</div>;
+  if (all === null) return <div className="empty-mini">Loading the table…</div>;
+  const teams = Object.values(boot.teams);
+  const rows = buildLeagueTable(teams, all);
+  const anyPlayed = rows.some(r => r.played > 0);
+  return (
+    <div>
+      <div className="card" style={{ padding:0, overflow:'hidden' }}>
+        <div style={{ overflowX:'auto' }}>
+          <table className="pl-table">
+            <thead><tr><th className="pl-pos">#</th><th className="pl-club">Club</th><th>P</th><th>W</th><th>D</th><th>L</th><th className="pl-hide">GF</th><th className="pl-hide">GA</th><th>GD</th><th className="pl-pts">Pts</th></tr></thead>
+            <tbody>
+              {rows.map(r => {
+                const zone = r.position <= 4 ? "ucl" : r.position >= 18 ? "rel" : "";
+                return (
+                  <tr key={r.short} className={"pl-row " + zone}>
+                    <td className="pl-pos">{r.position}</td>
+                    <td className="pl-club"><TeamBadge short={r.short} code={r.code} boot={boot} size={22} /><span className="pl-nm"><span className="nm-full">{r.name}</span><span className="nm-short">{r.short}</span></span></td>
+                    <td>{r.played}</td><td>{r.win}</td><td>{r.draw}</td><td>{r.loss}</td>
+                    <td className="pl-hide">{r.gf}</td><td className="pl-hide">{r.ga}</td><td>{r.gd>0?"+":""}{r.gd}</td>
+                    <td className="pl-pts">{r.pts}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {!anyPlayed && <p className="helper" style={{ marginTop:12 }}>No results yet — the table fills in as matches are played.</p>}
+      <div className="pl-key" style={{ marginTop:12 }}>
+        <span className="pl-key-item"><span className="pl-dot ucl"></span>Top 4</span>
+        <span className="pl-key-item"><span className="pl-dot rel"></span>Bottom 3 — their opponents are blocked in Survivor</span>
+      </div>
+    </div>
+  );
+}
+
 function FixturesView({ state, fpl }) {
   const [mode, setMode] = useState("fdr");
   return (
@@ -1599,13 +1624,14 @@ function FixturesView({ state, fpl }) {
       <div className="page-head">
         <div className="eyebrow">FIXTURES & DIFFICULTY</div>
         <h1 className="page-title">Match <span className="it">week.</span></h1>
-        <p className="page-sub">See the fixture difficulty run for every club (FDR), or browse the exact matches week by week.</p>
+        <p className="page-sub">The fixture difficulty run for every club (FDR), the matches week by week, or the live Premier League table.</p>
       </div>
       <div className="nav" style={{ marginBottom: 20 }}>
         <button className={mode==="fdr"?"active":""} onClick={()=>setMode("fdr")}>FDR</button>
         <button className={mode==="fixtures"?"active":""} onClick={()=>setMode("fixtures")}>Fixtures</button>
+        <button className={mode==="table"?"active":""} onClick={()=>setMode("table")}>PL Table</button>
       </div>
-      {mode==="fdr" ? <FdrGrid state={state} fpl={fpl} /> : <FixturesByWeek state={state} fpl={fpl} />}
+      {mode==="fdr" ? <FdrGrid state={state} fpl={fpl} /> : mode==="table" ? <PLTable state={state} fpl={fpl} /> : <FixturesByWeek state={state} fpl={fpl} />}
     </div>
   );
 }
@@ -1973,7 +1999,7 @@ function F4Tab({ state, gw, locked, live, boot, fixtures, myPred, updateMyPred, 
   const sum = f4Points(f4, live, sc);
   const hasAny = POSITIONS.some(pos => f4[slotKey[pos]]);
   const clearAll = () => { if (locked) { showToast("Gameweek locked"); return; } updateMyPred(p => ({ ...p, f4: { ...p.f4, [gw]: {} } })); };
-  const pitchOrder = ["GK","DEF","MID","FWD"];
+  const pitchOrder = ["FWD","MID","DEF","GK"];
   return (
     <div>
       {locked && <div className="lock-banner">🔒 Fantastic Four for GW{gw} is locked.</div>}
@@ -2390,8 +2416,9 @@ function LeaderboardView({ standings, currentUser, state, users, fpl, fplBusy, o
   const prevSorted = [...prev].sort((a,b) => comp(b,false).total - comp(a,false).total);
   const prevRank = {}; prevSorted.forEach((s,i) => { prevRank[s.name] = i+1; });
   const detailStanding = detail ? standings.find(s => s.name === detail) : null;
-    const potName = board==="overall" ? "Overall" : board==="stb" ? "Scores + Team" : "Fantastic Four + Bonus";
+  const potName = board==="overall" ? "Overall" : board==="stb" ? "Scores + Team" : "Fantastic Four + Bonus";
   const potDesc = board==="overall" ? "Everything combined." : board==="stb" ? "Prize pot 1 — score predictions & team of the week." : "Prize pot 2 — Fantastic Four & bonus questions.";
+
   return (
     <div>
       <div className="page-head">
@@ -2428,7 +2455,7 @@ function LeaderboardView({ standings, currentUser, state, users, fpl, fplBusy, o
         return <LeaderRow key={s.name} s={s} i={i} v={v} delta={delta} board={board} isYou={s.name===currentUser} onClick={()=>setDetail(s.name)} />;
       })}
       {detailStanding && <PlayerDetailModal standing={detailStanding} onClose={()=>setDetail(null)} />}
-      <p className="helper" style={{ marginTop:14 }}>Tap any pundit for their gameweek-by-gameweek breakdown. Two separate prize pots: <strong>Scores + Team + Bonus</strong> and <strong>Fantastic Four</strong>, plus the combined <strong>Overall</strong> table.{mode==="overall"?" Arrows show movement since last gameweek.":""}</p>
+      <p className="helper" style={{ marginTop:14 }}>Tap any pundit for their gameweek-by-gameweek breakdown. Two separate prize pots: <strong>Scores + Team</strong> and <strong>Fantastic Four + Bonus</strong>, plus the combined <strong>Overall</strong> table.{mode==="overall"?" Arrows show movement since last gameweek.":""}</p>
     </div>
   );
 }
@@ -2437,7 +2464,7 @@ function LeaderRow({ s, i, v, delta, board, isYou, onClick }) {
   const rankColor = i===0 ? "var(--yellow)" : i===1 ? "#cfd0d4" : i===2 ? "#d4824a" : "var(--ink-mute)";
   const move = delta==null ? null : delta>0 ? { t:"▲ UP "+delta, c:"var(--accent-2)" } : delta<0 ? { t:"▼ DOWN "+(-delta), c:"var(--red)" } : { t:"— no change", c:"var(--ink-mute)" };
   const boxes = board==="overall" ? [["SCORES",v.scores],["TEAM",v.team],["F4",v.f4],["BONUS",v.bonus]]
-     : board==="stb" ? [["SCORES",v.scores],["TEAM",v.team]]
+    : board==="stb" ? [["SCORES",v.scores],["TEAM",v.team]]
     : [["F4",v.f4],["BONUS",v.bonus]];
   return (
     <div className="lb-row" onClick={onClick}>
@@ -2586,17 +2613,28 @@ function buildLeaderboardCSV(standings) {
 // ============================================================
 // ADMIN
 // ============================================================
-function AdminView({ state, users, standings, fpl, updateState, isAdmin, setIsAdmin, adminRole, setAdminRole, showToast, onRefresh, adminAddUser, adminSetPassword, adminDeleteUser }) {
+function AdminView({ state, users, standings, fpl, updateState, isAdmin, setIsAdmin, adminRole, setAdminRole, showToast, onRefresh, adminAddUser, adminSetPassword, adminDeleteUser, iAmAdmin }) {
   const [u, setU] = useState(""); const [p, setP] = useState(""); const [err, setErr] = useState("");
-
   const doLogin = () => {
     if (u === ADMIN_USERNAME && p === ADMIN_PASSWORD) { setIsAdmin(true); setAdminRole("full"); setErr(""); return; }
     const ex = EXPORT_LOGINS.find(x => x.username === u && x.password === p);
     if (ex) { setIsAdmin(true); setAdminRole("export"); setErr(""); return; }
     setErr("Wrong username or password");
   };
+  const authed = isAdmin || iAmAdmin;
+  const role = iAmAdmin ? "full" : adminRole;
 
-  if (!isAdmin) {
+  if (!authed) {
+    if (ADMIN_EMAILS.length > 0) {
+      return (
+        <div>
+          <div className="page-head"><div className="eyebrow">RESTRICTED</div><h1 className="page-title">ADMIN <span className="it">only.</span></h1></div>
+          <div className="login-card" style={{ maxWidth:420, margin:'0 auto' }}>
+            <p className="helper" style={{ marginTop:0 }}>Admin access is tied to specific Google accounts. Sign in with an admin Google account to manage the league.</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div>
         <div className="page-head"><div className="eyebrow">RESTRICTED</div><h1 className="page-title">ADMIN <span className="it">only.</span></h1></div>
@@ -2609,7 +2647,7 @@ function AdminView({ state, users, standings, fpl, updateState, isAdmin, setIsAd
       </div>
     );
   }
-  if (adminRole === "export") return <ExportOnlyDashboard users={users} standings={standings} state={state} fpl={fpl} />;
+  if (role === "export") return <ExportOnlyDashboard users={users} standings={standings} state={state} fpl={fpl} />;
   return <AdminDashboard state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} showToast={showToast} onRefresh={onRefresh} adminAddUser={adminAddUser} adminSetPassword={adminSetPassword} adminDeleteUser={adminDeleteUser} />;
 }
 
@@ -2756,20 +2794,12 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
       </div>
 
       <div className="card" style={{ marginTop:18 }}>
-        <div className="card-title">Pundits &amp; passwords <span style={{ fontFamily:'JetBrains Mono', fontSize:12, color:'var(--ink-mute)' }}>{namedUsers.length} pundits</span></div>
-        <p className="helper" style={{ marginBottom:14 }}>Add or remove pundits and reset anyone's password. Passwords are stored hashed — you set a new one, you can't read the existing one. Leave the new-pundit password blank to let them set their own on first sign-in.</p>
-        <div className="grid grid-3" style={{ alignItems:'flex-end' }}>
-          <div className="field" style={{ marginBottom:0 }}><label>New pundit name</label><input value={newUser.name} onChange={e=>setNewUser({ ...newUser, name:e.target.value })} placeholder="e.g. Karan" /></div>
-          <div className="field" style={{ marginBottom:0 }}><label>Initial password (optional)</label><input value={newUser.pw} onChange={e=>setNewUser({ ...newUser, pw:e.target.value })} placeholder="blank = they set it themselves" /></div>
-          <button className="btn btn-primary btn-sm" onClick={doAddUser}>+ Add pundit</button>
-        </div>
-        <div className="divider" style={{ margin:'18px 0' }}></div>
+        <div className="card-title">Pundits <span style={{ fontFamily:'JetBrains Mono', fontSize:12, color:'var(--ink-mute)' }}>{namedUsers.length} pundits</span></div>
+        <p className="helper" style={{ marginBottom:14 }}>Everyone signs in with Google and picks their own display name — no passwords to manage. Remove a pundit here if you need to (deletes their account and all their picks — no undo).</p>
         {namedUsers.length === 0 ? <div className="empty-mini">No pundits yet.</div> : namedUsers.map(u => (
           <div key={u.name} className="fixture" style={{ marginBottom:10 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
-              <div style={{ fontWeight:700, minWidth:110 }}>{u.name}{!u.passwordHash ? <span style={{ color:'var(--yellow)', fontSize:11, marginLeft:6 }}>· no password</span> : null}</div>
-              <input type="text" value={pwInputs[u.name]||""} onChange={e=>setPwInputs(pp=>({ ...pp, [u.name]:e.target.value }))} placeholder="set new password" style={{ flex:1, minWidth:150, background:'var(--bg-2)', border:'1px solid var(--line)', color:'var(--ink)', padding:'8px 10px', borderRadius:3 }} />
-              <button className="btn btn-sm" onClick={()=>doSetPw(u.name)}>Reset password</button>
+            <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', justifyContent:'space-between' }}>
+              <div style={{ fontWeight:700 }}>{u.name}{u.email ? <span style={{ color:'var(--ink-mute)', fontSize:11, marginLeft:8 }}>{u.email}</span> : null}</div>
               <button className="btn btn-danger btn-sm" onClick={()=>doDeleteUser(u.name)}>Delete</button>
             </div>
           </div>
@@ -2822,7 +2852,7 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
 
       <div className="card" style={{ marginTop:18 }}>
         <div className="card-title">Bonus questions · GW{activeGW}</div>
-        <p className="helper" style={{ marginBottom:14 }}>Post yes/no or multiple-choice questions for this gameweek. After the games, set the correct answer to award points — they roll into the Overall table. Leave options blank for a free-text answer.</p>
+        <p className="helper" style={{ marginBottom:14 }}>Post yes/no or multiple-choice questions for this gameweek. After the games, set the correct answer to award points — they roll into the Fantastic Four + Bonus pot. Leave options blank for a free-text answer.</p>
         {bonusList.length === 0 ? <div className="empty-mini">No bonus questions for GW{activeGW} yet.</div> : bonusList.map(q => (
           <div key={q.id} className="fixture" style={{ marginBottom:10 }}>
             <div style={{ display:'flex', justifyContent:'space-between', gap:10, flexWrap:'wrap', marginBottom:10 }}>
