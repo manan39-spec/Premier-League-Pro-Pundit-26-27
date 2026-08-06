@@ -1533,7 +1533,6 @@ function RulesView({ state }) {
           <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Pick one team you're sure will <strong style={{color:'var(--ink)'}}>win</strong> this gameweek. A draw doesn't count — win only.</p>
           <ul className="rules-list compact" style={{ marginTop:12 }}>
             <li><span className="rule-name">Correct win</span><span className="rule-points">{sc.teamWin}</span></li>
-            <li><span className="rule-name">Picking a team a 3rd time</span><span className="rule-points" style={{ color:'var(--red)' }}>-{sc.teamOverPenalty}</span></li>
           </ul>
           <p className="helper" style={{ marginTop:12 }}>You can only pick a team <strong>{sc.teamMaxUses} times</strong> all season. In a double gameweek, tag the opponent for the fixture you mean — e.g. Leeds (BUR).</p>
           <div className="divider" style={{ margin:'20px 0' }}></div>
