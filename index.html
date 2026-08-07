@@ -1543,12 +1543,8 @@ function RulesView({ state }) {
         </div>
         <div className="card">
           <div className="card-title">2 · Survivor</div>
-          <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Pick one team you're sure will <strong style={{color:'var(--ink)'}}>win</strong> this gameweek. A draw doesn't count — win only.</p>
-          <ul className="rules-list compact" style={{ marginTop:12 }}>
-            <li><span className="rule-name">Correct win</span><span className="rule-points">{sc.teamWin}</span></li>
-            <li><span className="rule-name">Picking a team a 3rd time</span><span className="rule-points" style={{ color:'var(--red)' }}>-{sc.teamOverPenalty}</span></li>
-          </ul>
-          <p className="helper" style={{ marginTop:12 }}>You can only pick a team <strong>{sc.teamMaxUses} times</strong> all season. In a double gameweek, tag the opponent for the fixture you mean — e.g. Leeds (BUR).</p>
+          <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Each gameweek, pick one team to <strong style={{color:'var(--ink)'}}>win</strong>. Win → you advance; a draw, a loss or a missed deadline → you're out for the round. You score <strong>1 point for every week you survive</strong>, plus a winner bonus when a round settles.</p>
+          <p className="helper" style={{ marginTop:12 }}>Each team is usable once per round, and you can't pick the opponent of a bottom-3 club (Gameweek 1 excepted). Full survivor rules are in the card below.</p>
           <div className="divider" style={{ margin:'20px 0' }}></div>
           <div className="card-title" style={{ fontSize:20 }}>3 · Fantastic Four</div>
           <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Pick a GK, defender, midfielder and forward. You score the <strong style={{color:'var(--ink)'}}>sum of their real FPL points</strong> that gameweek — bonuses included.</p>
