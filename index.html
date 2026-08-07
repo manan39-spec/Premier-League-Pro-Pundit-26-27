@@ -519,9 +519,42 @@ async function setShared(key, value) {
 }
 async function getPersonal(key) { try { return parseStored(localStorage.getItem(key)); } catch { return null; } }
 async function setPersonal(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (e) { console.error('setPersonal', e); return false; } }
+async function remoteListStatus(prefix) {
+  if (!apiReady) return { ok: false, keys: [] };
+  try { const r = await fetch(`${API_STORE}?prefix=${encodeURIComponent(prefix)}`); if (!r.ok) return { ok: false, keys: [] }; const d = await r.json(); return { ok: true, keys: Array.isArray(d.keys) ? d.keys : [] }; }
+  catch (e) { console.warn('remoteListStatus', e); return { ok: false, keys: [] }; }
+}
+// Only fall back to local when the server call FAILS — a genuinely empty server
+// must return [] (not this device's stale cache), or old records ghost forever.
 async function listShared(prefix) {
-  if (apiReady) { const k = await remoteList(prefix); if (k.length) return k; }
+  if (apiReady) { const r = await remoteListStatus(prefix); if (r.ok) return r.keys; }
   try { return Object.keys(localStorage).filter(k => k.startsWith(prefix)); } catch { return []; }
+}
+
+// ---- Reset epoch: a wipe / forced re-sync bumps a server "generation" stamp.
+// Any device on an older generation clears its local cache and reloads, so it
+// re-registers cleanly against the server instead of logging in from stale cache. ----
+function clearLocalLeagueData() {
+  try {
+    const keep = { pp_epoch_seen: 1, pp_theme: 1 };
+    Object.keys(localStorage).forEach(k => { if (keep[k]) return; if (k === "current_user" || k.startsWith("pp_")) localStorage.removeItem(k); });
+  } catch {}
+}
+async function checkEpoch() {
+  if (!apiReady) return false;
+  let serverEpoch = 0;
+  try { serverEpoch = Number(await remoteGet("pp_epoch")) || 0; } catch { return false; }
+  if (!serverEpoch) return false;
+  let seen = 0;
+  try { seen = Number(parseStored(localStorage.getItem("pp_epoch_seen"))) || 0; } catch {}
+  if (seen >= serverEpoch) return false;
+  let hasLocal = false;
+  try { hasLocal = Object.keys(localStorage).some(k => k === "current_user" || k === "pp_state" || k.startsWith("pp_pred:") || k.startsWith("pp_google:")); } catch {}
+  try { localStorage.setItem("pp_epoch_seen", JSON.stringify(serverEpoch)); } catch {}
+  if (seen === 0 && !hasLocal) return false;   // fresh device — just adopt the epoch, nothing to clear
+  clearLocalLeagueData();
+  try { const u = new URL(location.href); u.searchParams.set("r", String(serverEpoch)); location.replace(u.toString()); } catch { try { location.reload(); } catch {} }
+  return true;
 }
 
 // ============================================================
@@ -670,7 +703,7 @@ const EXPORT_LOGINS = [
 // the Google Cloud console to enable the "Continue with Google" button. Leave the
 // string empty to hide Google login entirely (name/password still works).
 const GOOGLE_CLIENT_ID = "901965344611-g2cc7mpeqf1fj8pismatrrd4oer6nr1i.apps.googleusercontent.com";
-const APP_VERSION = 20260207;   // bump on every deploy — clients on an older build get flushed automatically
+const APP_VERSION = 20260208;   // bump on every deploy — clients on an older build get flushed automatically
 const TOTAL_GW = 38;
 const HALF_SPLIT = 19; // GW1-19 first half, GW20-38 second half
 const POSITIONS = ["GK", "DEF", "MID", "FWD"];
@@ -1118,10 +1151,11 @@ function App() {
 
   useEffect(() => {
     (async () => {
-      const savedUser = await getPersonal("current_user");
-      if (savedUser) setUser(savedUser);
       const ready = await initApi();
       setRemoteAvailable(ready);
+      if (await checkEpoch()) return;   // stale generation -> clears local + reloads
+      const savedUser = await getPersonal("current_user");
+      if (savedUser) setUser(savedUser);
       await refreshAll(false);
       setLoading(false);
     })();
@@ -1131,6 +1165,7 @@ function App() {
   useEffect(() => {
     if (!remoteAvailable) return;
     const id = setInterval(async () => {
+      if (await checkEpoch()) return;
       const s = await refreshState();
       const active = (s || stateRef.current || {}).activeGW || 1;
       const fx = await fplFixtures(active, true);
@@ -1164,6 +1199,9 @@ function App() {
     const id = setInterval(check, SYNC_POLL_MS);
     return () => { stop = true; clearInterval(id); };
   }, [remoteAvailable]);
+
+  // Pull the freshest roster when opening a view that lists every pundit.
+  useEffect(() => { if (remoteAvailable && (view === "leaderboard" || view === "admin")) { loadUsers(); } }, [view, remoteAvailable]);
 
   const login = useCallback(async (name) => {
     const clean = name.trim(); if (!clean) return;
@@ -2154,7 +2192,7 @@ function F4Tab({ state, gw, locked, live, boot, fixtures, myPred, updateMyPred, 
   const sum = f4Points(f4, live, sc);
   const hasAny = POSITIONS.some(pos => f4[slotKey[pos]]);
   const clearAll = () => { if (locked) { showToast("Gameweek locked"); return; } updateMyPred(p => ({ ...p, f4: { ...p.f4, [gw]: {} } })); };
-  const pitchOrder = ["GK","DEF","MID","FWD"];
+  const pitchOrder = ["FWD","MID","DEF","GK"];
   return (
     <div>
       {locked && <div className="lock-banner">🔒 Fantastic Four for GW{gw} is locked.</div>}
@@ -2992,11 +3030,21 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
   });
   const setScoring = (key, v) => updateState(s => ({ ...s, scoring: { ...(s.scoring||DEFAULT_SCORING), [key]: Number(v) } }));
 
+  const forceResync = async () => {
+    if (!window.confirm("Force every other device to re-sync and re-login on next open? No data is deleted — this only clears stale sessions (use after a wipe).")) return;
+    const e = Date.now();
+    await setShared("pp_epoch", e);
+    try { localStorage.setItem("pp_epoch_seen", JSON.stringify(e)); } catch {}
+    showToast("Done — other devices will re-sync + re-login on next open.");
+  };
   const resetAll = async () => {
     if (!window.confirm("Wipe ALL league data (every pundit's picks AND all settings)? This cannot be undone.")) return;
     if (!window.confirm("Really sure? Type-check: this deletes everything under pp_. Click OK to proceed.")) return;
     await remoteWipePrefix("pp_");
+    const _ep = Date.now();
+    await setShared("pp_epoch", _ep);   // new generation -> every other device re-syncs + re-logs-in
     try { Object.keys(localStorage).filter(k=>k.startsWith("pp_")).forEach(k=>localStorage.removeItem(k)); } catch {}
+    try { localStorage.setItem("pp_epoch_seen", JSON.stringify(_ep)); } catch {}
     showToast("All data wiped. Reload the page.");
   };
 
@@ -3195,6 +3243,10 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
       <div className="card" style={{ marginTop:18, borderColor:'rgba(255,77,77,0.3)' }}>
         <div className="card-title" style={{ color:'var(--red)' }}>Danger zone</div>
         <p className="helper" style={{ marginBottom:12 }}>Wipes every pundit's account and picks plus all settings. There's no undo — export a backup first.</p>
+        <div style={{ marginBottom:16 }}>
+          <p className="helper" style={{ marginBottom:8 }}>Force every device to re-sync and re-login on next open — fixes stale sessions after a wipe. No data is deleted.</p>
+          <button className="btn btn-sm" onClick={forceResync}>↻ Force all devices to re-sync</button>
+        </div>
         <button className="btn btn-danger btn-sm" onClick={resetAll}>Wipe all league data</button>
       </div>
     </div>
