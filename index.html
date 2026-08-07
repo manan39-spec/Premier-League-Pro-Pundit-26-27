@@ -677,6 +677,7 @@ const DEFAULT_SCORING = {
   gfOutcome: 1, gfExact: 2, gfThreshold: 4, // total must be strictly greater than 4
   teamWin: 3, teamOverPenalty: 1, teamMaxUses: 2,
   f4Multiplier: 1,
+  survivorWinBonus: 1,   // points for winning a survivor round (admin-configurable)
 };
 
 function defaultState() {
@@ -879,7 +880,7 @@ function survivorRoundRange(rounds, i) {
 function computeSurvivorRound(rounds, i, users, state, fpl, allFixtures) {
   const [startGW, endGW] = survivorRoundRange(rounds, i);
   let alive = (users || []).map(u => u.name);
-  const elimByGW = {}; let status = "picking", winners = [], settledGW = null, currentGW = startGW;
+  const elimByGW = {}, survivedByGW = {}; let status = "picking", winners = [], settledGW = null, currentGW = startGW;
   for (let gw = startGW; gw <= endGW; gw++) {
     currentGW = gw;
     if (!gwLocked(state, fpl, gw)) { status = "picking"; break; }
@@ -893,21 +894,31 @@ function computeSurvivorRound(rounds, i, users, state, fpl, allFixtures) {
     }
     elimByGW[gw] = out;
     if (pending) { alive = alive.filter(n => !out.includes(n)); status = "awaiting"; break; }
+    survivedByGW[gw] = survived.slice();
     if (survived.length === 0) { alive = []; status = "void"; settledGW = gw; break; }
     if (survived.length <= 3) { alive = survived.slice(); winners = survived.slice(); status = "settled"; settledGW = gw; break; }
     alive = survived; status = "picking";
   }
-  return { id: rounds[i].id, no: rounds[i].no, startGW, endGW, status, alive, winners, elimByGW, settledGW, currentGW };
+  return { id: rounds[i].id, no: rounds[i].no, startGW, endGW, status, alive, winners, elimByGW, survivedByGW, settledGW, currentGW };
 }
 function computeAllSurvivorRounds(state, users, fpl) {
   const rounds = (state && state.survivorRounds) || [];
   const allFx = allLoadedFixtures(fpl);
   return rounds.map((r, i) => computeSurvivorRound(rounds, i, users, state, fpl, allFx));
 }
-function survivorPointsByName(roundResults) {
+function survivorPointsByName(roundResults, winBonus) {
+  const bonus = (winBonus != null && !isNaN(Number(winBonus))) ? Number(winBonus) : 1;
   const pts = {};
-  (roundResults || []).forEach(rr => { if (rr.status === "settled") rr.winners.forEach(n => { pts[n] = (pts[n] || 0) + 1; }); });
+  (roundResults || []).forEach(rr => {
+    Object.keys(rr.survivedByGW || {}).forEach(g => { (rr.survivedByGW[g] || []).forEach(n => { pts[n] = (pts[n] || 0) + 1; }); });   // +1 per week survived
+    if (rr.status === "settled") rr.winners.forEach(n => { pts[n] = (pts[n] || 0) + bonus; });                                          // winner bonus
+  });
   return pts;
+}
+function survivorWinsByName(roundResults) {
+  const w = {};
+  (roundResults || []).forEach(rr => { if (rr.status === "settled") rr.winners.forEach(n => { w[n] = (w[n] || 0) + 1; }); });
+  return w;
 }
 function activeSurvivorRound(roundResults) {
   for (let i = (roundResults || []).length - 1; i >= 0; i--) {
@@ -1036,6 +1047,7 @@ function App() {
     if (!s.bonus) { s.bonus = {}; save = true; }
     if (s.survivorEnabled === undefined) { s.survivorEnabled = true; save = true; }
     if (!Array.isArray(s.survivorRounds)) { s.survivorRounds = []; save = true; }
+    if (s.scoring && s.scoring.survivorWinBonus === undefined) { s.scoring.survivorWinBonus = 1; save = true; }
     if (!s.activeGW) { s.activeGW = 1; save = true; }
     if (!s.openGWs || !s.openGWs.length) { s.openGWs = [s.activeGW || 1]; save = true; }
     if (save && apiReady) await setShared("pp_state", s);
@@ -1213,7 +1225,8 @@ function App() {
 
   const standings = useMemo(() => state ? computeStandings(users, state, fpl) : [], [users, state, fpl]);
   const survivorRounds = useMemo(() => state ? computeAllSurvivorRounds(state, users, fpl) : [], [state, users, fpl]);
-  const survivorPts = useMemo(() => survivorPointsByName(survivorRounds), [survivorRounds]);
+  const survivorPts = useMemo(() => survivorPointsByName(survivorRounds, state && state.scoring && state.scoring.survivorWinBonus), [survivorRounds, state]);
+  const survivorWins = useMemo(() => survivorWinsByName(survivorRounds), [survivorRounds]);
 
   if (loading) {
     return (
@@ -1251,7 +1264,7 @@ function App() {
         {view==="predict" && <PredictView state={state} myPred={myPred} users={users} fpl={fpl} updateMyPred={updateMyPred} showToast={showToast} tab={predictTab} setTab={setPredictTab} survivorRounds={survivorRounds} />}
         {view==="fixtures" && <FixturesView state={state} fpl={fpl} />}
         {view==="picks" && <PicksView state={state} users={users} currentUser={user} fpl={fpl} />}
-        {view==="leaderboard" && <LeaderboardView standings={standings} currentUser={user} state={state} users={users} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} survivorPts={survivorPts} />}
+        {view==="leaderboard" && <LeaderboardView standings={standings} currentUser={user} state={state} users={users} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} survivorPts={survivorPts} survivorWins={survivorWins} />}
         {view==="rules" && <RulesView state={state} />}
         {view==="admin" && <AdminView state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} isAdmin={isAdmin} setIsAdmin={setIsAdmin} adminRole={adminRole} setAdminRole={setAdminRole} showToast={showToast} onRefresh={()=>refreshAll(true)} adminAddUser={adminAddUser} adminSetPassword={adminSetPassword} adminDeleteUser={adminDeleteUser} iAmAdmin={!!(myPred && myPred.email && ADMIN_EMAILS.some(e=>e && e.toLowerCase()===String(myPred.email).toLowerCase()))} />}
 
@@ -1488,7 +1501,7 @@ function HomeView({ state, user, myPred, standings, fpl, fplBusy, onRefresh, set
           <div className="card-title">Your Breakdown <button className="btn btn-ghost btn-sm" onClick={onRefresh} disabled={fplBusy}>{fplBusy?"↻ …":"↻ Refresh"}</button></div>
           <ul className="rules-list">
             <li><span className="rule-name">Score predictions</span><span className="rule-points">{myRow?myRow.breakdown.scores:0}</span></li>
-            <li><span className="rule-name">Survivor <span style={{ fontSize:11, color:'var(--ink-mute)' }}>(round wins)</span></span><span className="rule-points">{(survivorPts && survivorPts[user]) || 0}</span></li>
+            <li><span className="rule-name">Survivor <span style={{ fontSize:11, color:'var(--ink-mute)' }}>(points)</span></span><span className="rule-points">{(survivorPts && survivorPts[user]) || 0}</span></li>
             <li><span className="rule-name">Fantastic Four</span><span className="rule-points">{myRow?myRow.breakdown.f4:0}</span></li>
             <li><span className="rule-name">Bonus questions</span><span className="rule-points">{myRow?(myRow.breakdown.bonus||0):0}</span></li>
             <li style={{ borderTop:'1px solid var(--line)', marginTop:6, paddingTop:12 }}><span className="rule-name" style={{ fontWeight:700 }}>Total</span><span className="rule-points" style={{ color:'var(--accent-2)' }}>{myRow?myRow.total:0}</span></li>
@@ -1533,6 +1546,7 @@ function RulesView({ state }) {
           <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Pick one team you're sure will <strong style={{color:'var(--ink)'}}>win</strong> this gameweek. A draw doesn't count — win only.</p>
           <ul className="rules-list compact" style={{ marginTop:12 }}>
             <li><span className="rule-name">Correct win</span><span className="rule-points">{sc.teamWin}</span></li>
+            <li><span className="rule-name">Picking a team a 3rd time</span><span className="rule-points" style={{ color:'var(--red)' }}>-{sc.teamOverPenalty}</span></li>
           </ul>
           <p className="helper" style={{ marginTop:12 }}>You can only pick a team <strong>{sc.teamMaxUses} times</strong> all season. In a double gameweek, tag the opponent for the fixture you mean — e.g. Leeds (BUR).</p>
           <div className="divider" style={{ margin:'20px 0' }}></div>
@@ -1543,7 +1557,7 @@ function RulesView({ state }) {
       </div>
       <div className="card" style={{ marginTop:18 }}>
         <div className="card-title">Survivor</div>
-        <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Each gameweek, pick one team to <strong style={{color:'var(--ink)'}}>win</strong>. Win and you advance; a draw, a loss, or a missed deadline knocks you out for the round. Each team is usable <strong>only once per round</strong>, and you <strong>can't pick the opponent of a bottom-3 club</strong> (you can pick the bottom-3 club itself; if two bottom-3 sides meet, either is fair game). A round runs until 3 or fewer pundits are left — each survivor scores <strong>1 point</strong>. If everyone is knocked out in the same week the round voids and restarts with nobody scoring. Most round wins takes the Survivor prize pot.</p>
+        <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Each gameweek, pick one team to <strong style={{color:'var(--ink)'}}>win</strong>. Win and you advance; a draw, a loss, or a missed deadline knocks you out for the round. Each team is usable <strong>only once per round</strong> — once you've used a club you can't pick it again (no penalty, the app simply won't allow it). You <strong>can't pick the opponent of a bottom-3 club</strong> (you can pick the bottom-3 club itself; if two bottom-3 sides meet, either is fair game); the one exception is <strong>Gameweek 1</strong>, when every team is available. <strong>Scoring:</strong> you earn <strong>1 point for every week you survive</strong>. A round runs until 3 or fewer pundits are left — the final survivors each get a <strong>bonus point</strong> (set by the admin) for winning, then the round resets and everyone re-enters with teams cleared. If everyone is knocked out in the same week, that week scores nothing but you keep every point banked earlier. The Survivor pot goes to whoever has the <strong>most points</strong> across the season.</p>
       </div>
       <div style={{ marginTop:18 }}>
         <div className="card">
@@ -2086,7 +2100,7 @@ function F4Tab({ state, gw, locked, live, boot, fixtures, myPred, updateMyPred, 
   const sum = f4Points(f4, live, sc);
   const hasAny = POSITIONS.some(pos => f4[slotKey[pos]]);
   const clearAll = () => { if (locked) { showToast("Gameweek locked"); return; } updateMyPred(p => ({ ...p, f4: { ...p.f4, [gw]: {} } })); };
-  const pitchOrder = ["GK","DEF","MID","FWD"];
+  const pitchOrder = ["FWD","MID","DEF","GK"];
   return (
     <div>
       {locked && <div className="lock-banner">🔒 Fantastic Four for GW{gw} is locked.</div>}
@@ -2563,7 +2577,7 @@ function PicksView({ state, users, currentUser, fpl }) {
 // ============================================================
 // LEADERBOARD
 // ============================================================
-function LeaderboardView({ standings, currentUser, state, users, fpl, fplBusy, onRefresh, survivorPts }) {
+function LeaderboardView({ standings, currentUser, state, users, fpl, fplBusy, onRefresh, survivorPts, survivorWins }) {
   const [board, setBoard] = useState("overall");   // overall | scoreline | f4 | survivor
   const [mode, setMode] = useState("overall");      // overall (cumulative) | gw
   const activeGW = state.activeGW || 1;
@@ -2588,7 +2602,7 @@ function LeaderboardView({ standings, currentUser, state, users, fpl, fplBusy, o
   const potDesc = board==="overall" ? "Score + F4 + Bonus combined — the summary table (no separate prize)."
     : board==="scoreline" ? "Prize pot — score predictions only."
     : board==="f4" ? "Prize pot — Fantastic Four only."
-    : "Prize pot — 1 point per survivor round you win.";
+    : "Prize pot — 1 point per week survived, plus a winner bonus when a round settles.";
   const showModeSeg = board !== "survivor";
 
   return (
@@ -2625,7 +2639,7 @@ function LeaderboardView({ standings, currentUser, state, users, fpl, fplBusy, o
         <div className="empty"><div className="empty-title">NO POINTS YET</div><p>Once results land, the table fills in here.</p></div>
       ) : rows.map((s2, i) => {
         const v = board==="survivor"
-          ? { scores:0, f4:0, bonus:0, rounds: sp[s2.name] || 0, total: sp[s2.name] || 0 }
+          ? { scores:0, f4:0, bonus:0, rounds: (survivorWins && survivorWins[s2.name]) || 0, total: sp[s2.name] || 0 }
           : comp(s2, mode==="gw");
         const pr = prevRank[s2.name];
         const delta = (board!=="survivor" && mode==="overall" && prev.length && pr) ? (pr - (i+1)) : null;
@@ -2643,8 +2657,8 @@ function LeaderRow({ s, i, v, delta, board, isYou, onClick }) {
   const boxes = board==="overall" ? [["SCORES",v.scores],["F4",v.f4],["BONUS",v.bonus]]
     : board==="scoreline" ? [["SCORES",v.scores]]
     : board==="f4" ? [["F4",v.f4]]
-    : [["ROUNDS",v.rounds]];
-  const totLabel = board==="survivor" ? "ROUND WINS" : "TOTAL PTS";
+    : [["ROUND WINS",v.rounds]];
+  const totLabel = board==="survivor" ? "SURVIVOR PTS" : "TOTAL PTS";
   return (
     <div className="lb-row" onClick={onClick}>
       <div className="lb-row-rank" style={{ color:rankColor }}>{i>=3?"#":""}{i+1}</div>
@@ -2961,11 +2975,15 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
 
         <div className="card">
           <div className="card-title">Survivor</div>
-          <p className="helper" style={{ marginBottom:12 }}>Multi-round knockout. A round runs until 3 or fewer pundits remain (each gets 1 point), or everyone falls the same week (round voids, nobody scores). Start a round when you want the next one to begin — it opens from the current active gameweek and everyone re-enters with all teams reset.</p>
+          <p className="helper" style={{ marginBottom:12 }}>Multi-round knockout. Players score <strong>1 point for every week they survive</strong>, plus the winner bonus below when a round settles (3 or fewer left). If everyone falls the same week that week scores nothing but earlier points are kept. Start a round when you want the next one to begin — it opens from the current active gameweek and everyone re-enters with all teams reset.</p>
           <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', marginBottom:14 }}>
             <button className={"btn btn-sm " + (state.survivorEnabled?"btn-go":"btn-ghost")} onClick={toggleSurvivor}>{state.survivorEnabled ? "✓ Survivor ON" : "Survivor OFF"}</button>
             <button className="btn btn-primary btn-sm" onClick={startNewRound} disabled={!state.survivorEnabled || !!survActive}>+ Start new round (from GW{activeGW})</button>
             {survActive && <span className="helper" style={{ margin:0 }}>Round {survActive.no} is live — {survActive.alive.length} alive. Finish it first.</span>}
+          </div>
+          <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:14, flexWrap:'wrap' }}>
+            <label className="helper" style={{ margin:0 }}>Winner bonus (points for winning a round)</label>
+            <input type="number" value={(state.scoring && state.scoring.survivorWinBonus != null) ? state.scoring.survivorWinBonus : 1} onChange={e=>updateState(st => ({ ...st, scoring: { ...st.scoring, survivorWinBonus: Number(e.target.value)||0 } }))} style={{ width:70, background:'var(--bg-2)', border:'1px solid var(--line)', color:'var(--ink)', padding:'7px 10px', borderRadius:6 }} />
           </div>
           {survRounds.length === 0 ? <div className="empty-mini">No rounds started yet.</div> : (
             <table className="lb-table"><thead><tr><th>Round</th><th>From</th><th>Status</th><th>Alive / Winners</th><th></th></tr></thead>
