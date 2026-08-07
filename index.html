@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
 <title>Pro Pundit League — Premier League Prediction Game</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -667,6 +670,7 @@ const EXPORT_LOGINS = [
 // the Google Cloud console to enable the "Continue with Google" button. Leave the
 // string empty to hide Google login entirely (name/password still works).
 const GOOGLE_CLIENT_ID = "901965344611-g2cc7mpeqf1fj8pismatrrd4oer6nr1i.apps.googleusercontent.com";
+const APP_VERSION = 20260207;   // bump on every deploy — clients on an older build get flushed automatically
 const TOTAL_GW = 38;
 const HALF_SPLIT = 19; // GW1-19 first half, GW20-38 second half
 const POSITIONS = ["GK", "DEF", "MID", "FWD"];
@@ -1023,6 +1027,20 @@ function App() {
   useEffect(() => { try { document.documentElement.classList.toggle("light", theme === "light"); } catch {} try { localStorage.setItem("pp_theme", theme); } catch {} }, [theme]);
   const stateRef = useRef(null);
   useEffect(() => { stateRef.current = state; }, [state]);
+  const survivorOnRef = useRef(null);   // survivor on/off source of truth (protected key), immune to stale clients
+  const [staleBuild, setStaleBuild] = useState(false);
+
+  const setSurvivorOn = useCallback(async (on) => {
+    const val = !!on;
+    survivorOnRef.current = val;
+    setState(s => s ? { ...s, survivorEnabled: val } : s);
+    try { localStorage.setItem("pp_survivor_on", JSON.stringify(val)); } catch {}
+    if (apiReady) {
+      let ok = false;
+      for (let i = 0; i < 3 && !ok; i++) { if (i) await new Promise(r => setTimeout(r, 400)); ok = await remoteSet("pp_survivor_on", val); }
+      if (!ok) showToast("⚠️ Couldn't save the survivor toggle — try again.");
+    }
+  }, [showToast]);
 
   const showToast = useCallback((msg) => { setToast(msg); setTimeout(() => setToast(null), 2600); }, []);
   const goPredict = useCallback((t) => { setPredictTab(t || "scores"); setView("predict"); }, []);
@@ -1035,7 +1053,7 @@ function App() {
       const res = await remoteGetStatus("pp_state");
       if (res.ok && res.value) { s = res.value; try { localStorage.setItem("pp_state", JSON.stringify(s)); } catch {} }
       else if (res.ok && !res.value) { s = defaultState(); await setShared("pp_state", s); }
-      else { const local = parseStored(localStorage.getItem("pp_state")); if (local) setState(local); return local; }
+      else { const local = parseStored(localStorage.getItem("pp_state")); if (local) { if (survivorOnRef.current != null) local.survivorEnabled = survivorOnRef.current; setState(local); } return local; }
     } else {
       s = parseStored(localStorage.getItem("pp_state")) || defaultState();
     }
@@ -1051,6 +1069,14 @@ function App() {
     if (!s.activeGW) { s.activeGW = 1; save = true; }
     if (!s.openGWs || !s.openGWs.length) { s.openGWs = [s.activeGW || 1]; save = true; }
     if (save && apiReady) await setShared("pp_state", s);
+    // Survivor on/off lives in its own key so an out-of-date client can't flip it via pp_state.
+    if (apiReady) {
+      const so = await getShared("pp_survivor_on");
+      if (so === null || so === undefined) { survivorOnRef.current = !!s.survivorEnabled; await setShared("pp_survivor_on", !!s.survivorEnabled); }
+      else { s.survivorEnabled = !!so; survivorOnRef.current = !!so; }
+    } else if (survivorOnRef.current != null) {
+      s.survivorEnabled = survivorOnRef.current;
+    }
     setState(s);
     return s;
   }, []);
@@ -1114,6 +1140,31 @@ function App() {
     return () => clearInterval(id);
   }, [remoteAvailable, refreshState]);
 
+  // App-version beacon: advertise the newest build, and flush stale ones.
+  useEffect(() => {
+    if (!remoteAvailable) return;
+    let stop = false;
+    const check = async () => {
+      try {
+        const cur = Number(await getShared("pp_ver")) || 0;
+        if (cur < APP_VERSION) { await setShared("pp_ver", APP_VERSION); }
+        else if (cur > APP_VERSION && !stop) {
+          setStaleBuild(true);
+          try {
+            const key = "pp_reloaded_" + cur;
+            if (typeof document !== "undefined" && document.hidden && !sessionStorage.getItem(key)) {
+              sessionStorage.setItem(key, "1");
+              const u = new URL(location.href); u.searchParams.set("v", String(cur)); location.replace(u.toString());
+            }
+          } catch {}
+        }
+      } catch {}
+    };
+    check();
+    const id = setInterval(check, SYNC_POLL_MS);
+    return () => { stop = true; clearInterval(id); };
+  }, [remoteAvailable]);
+
   const login = useCallback(async (name) => {
     const clean = name.trim(); if (!clean) return;
     setUser(clean); await setPersonal("current_user", clean); await refreshAll(false);
@@ -1145,6 +1196,7 @@ function App() {
       if (!base) { showToast("⚠️ Offline and no local data — not saved."); return; }
     }
     const updated = mutator({ ...base });
+    if (survivorOnRef.current != null) updated.survivorEnabled = survivorOnRef.current;   // protect admin-set survivor flag
     try { localStorage.setItem("pp_state", JSON.stringify(updated)); } catch {}
     setState(updated);
     if (!apiReady) { showToast("⚠️ Offline — saved on this device only."); return; }
@@ -1239,6 +1291,12 @@ function App() {
 
   return (
     <>
+      {staleBuild && (
+        <div onClick={()=>{ try { const u=new URL(location.href); u.searchParams.set("v", String(Date.now())); location.href=u.toString(); } catch { location.reload(); } }}
+          style={{ position:'fixed', top:0, left:0, right:0, zIndex:9999, background:'var(--accent)', color:'#fff', textAlign:'center', padding:'10px 14px', fontFamily:'JetBrains Mono, monospace', fontSize:12, fontWeight:700, letterSpacing:'0.06em', cursor:'pointer' }}>
+          A newer version is available — tap to reload
+        </div>
+      )}
       <div className="app">
         <header className="top">
           <div className="brand">
@@ -1266,7 +1324,7 @@ function App() {
         {view==="picks" && <PicksView state={state} users={users} currentUser={user} fpl={fpl} />}
         {view==="leaderboard" && <LeaderboardView standings={standings} currentUser={user} state={state} users={users} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} survivorPts={survivorPts} survivorWins={survivorWins} />}
         {view==="rules" && <RulesView state={state} />}
-        {view==="admin" && <AdminView state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} isAdmin={isAdmin} setIsAdmin={setIsAdmin} adminRole={adminRole} setAdminRole={setAdminRole} showToast={showToast} onRefresh={()=>refreshAll(true)} adminAddUser={adminAddUser} adminSetPassword={adminSetPassword} adminDeleteUser={adminDeleteUser} iAmAdmin={!!(myPred && myPred.email && ADMIN_EMAILS.some(e=>e && e.toLowerCase()===String(myPred.email).toLowerCase()))} />}
+        {view==="admin" && <AdminView state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} isAdmin={isAdmin} setIsAdmin={setIsAdmin} adminRole={adminRole} setAdminRole={setAdminRole} showToast={showToast} onRefresh={()=>refreshAll(true)} adminAddUser={adminAddUser} adminSetPassword={adminSetPassword} adminDeleteUser={adminDeleteUser} setSurvivorOn={setSurvivorOn} iAmAdmin={!!(myPred && myPred.email && ADMIN_EMAILS.some(e=>e && e.toLowerCase()===String(myPred.email).toLowerCase()))} />}
 
         <footer className="app-footer">
           Pro Pundit League · <span className="accent">Season 6</span> · Put those pundit hats on
@@ -2096,7 +2154,7 @@ function F4Tab({ state, gw, locked, live, boot, fixtures, myPred, updateMyPred, 
   const sum = f4Points(f4, live, sc);
   const hasAny = POSITIONS.some(pos => f4[slotKey[pos]]);
   const clearAll = () => { if (locked) { showToast("Gameweek locked"); return; } updateMyPred(p => ({ ...p, f4: { ...p.f4, [gw]: {} } })); };
-  const pitchOrder = ["GK","DEF","MID","FWD"];
+  const pitchOrder = ["FWD","MID","DEF","GK"];
   return (
     <div>
       {locked && <div className="lock-banner">🔒 Fantastic Four for GW{gw} is locked.</div>}
@@ -2802,7 +2860,7 @@ function buildLeaderboardCSV(standings) {
 // ============================================================
 // ADMIN
 // ============================================================
-function AdminView({ state, users, standings, fpl, updateState, isAdmin, setIsAdmin, adminRole, setAdminRole, showToast, onRefresh, adminAddUser, adminSetPassword, adminDeleteUser, iAmAdmin }) {
+function AdminView({ state, users, standings, fpl, updateState, isAdmin, setIsAdmin, adminRole, setAdminRole, showToast, onRefresh, adminAddUser, adminSetPassword, adminDeleteUser, setSurvivorOn, iAmAdmin }) {
   const [u, setU] = useState(""); const [p, setP] = useState(""); const [err, setErr] = useState("");
   const doLogin = () => {
     if (u === ADMIN_USERNAME && p === ADMIN_PASSWORD) { setIsAdmin(true); setAdminRole("full"); setErr(""); return; }
@@ -2837,7 +2895,7 @@ function AdminView({ state, users, standings, fpl, updateState, isAdmin, setIsAd
     );
   }
   if (role === "export") return <ExportOnlyDashboard users={users} standings={standings} state={state} fpl={fpl} />;
-  return <AdminDashboard state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} showToast={showToast} onRefresh={onRefresh} adminAddUser={adminAddUser} adminSetPassword={adminSetPassword} adminDeleteUser={adminDeleteUser} />;
+  return <AdminDashboard state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} showToast={showToast} onRefresh={onRefresh} adminAddUser={adminAddUser} adminSetPassword={adminSetPassword} adminDeleteUser={adminDeleteUser} setSurvivorOn={setSurvivorOn} />;
 }
 
 function ExportOnlyDashboard({ users, standings, state, fpl }) {
@@ -2857,7 +2915,7 @@ function ExportOnlyDashboard({ users, standings, state, fpl }) {
   );
 }
 
-function AdminDashboard({ state, users, standings, fpl, updateState, showToast, onRefresh, adminAddUser, adminSetPassword, adminDeleteUser }) {
+function AdminDashboard({ state, users, standings, fpl, updateState, showToast, onRefresh, adminAddUser, adminSetPassword, adminDeleteUser, setSurvivorOn }) {
   const boot = fpl.boot;
   const now = Date.now();
   const activeGW = state.activeGW || 1;
@@ -2901,7 +2959,7 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
   };
   const setBonusAnswer = (qid, ans) => updateState(st => ({ ...st, bonus: { ...(st.bonus||{}), [activeGW]: (((st.bonus||{})[activeGW])||[]).map(q => q.id===qid ? { ...q, answer: ans } : q) } }));
   const delBonus = (qid) => updateState(st => ({ ...st, bonus: { ...(st.bonus||{}), [activeGW]: (((st.bonus||{})[activeGW])||[]).filter(q => q.id!==qid) } }));
-  const toggleSurvivor = () => updateState(st => ({ ...st, survivorEnabled: !st.survivorEnabled }));
+  const toggleSurvivor = () => setSurvivorOn(!state.survivorEnabled);
   const survRounds = computeAllSurvivorRounds(state, users, fpl);
   const survActive = activeSurvivorRound(survRounds);
   const startNewRound = () => {
