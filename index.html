@@ -462,9 +462,16 @@ const API_AUTH = '/api/auth';
 const SYNC_POLL_MS = 30000;
 let apiReady = false;
 
+// Every call to /api/* must carry the HttpOnly session cookie that /api/auth
+// sets after verifying a Google ID token. 'same-origin' is already the fetch
+// default, but stating it makes the requirement obvious — without the cookie
+// the server answers 401 and nothing can be read or written.
+const CREDS = { credentials: 'same-origin' };
+const JSON_POST = { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' };
+
 async function initApi() {
   try {
-    const res = await fetch(`${API_STORE}?health=1`);
+    const res = await fetch(`${API_STORE}?health=1`, CREDS);
     if (!res.ok) { apiReady = false; return false; }
     const data = await res.json();
     apiReady = !!data.ok;
@@ -473,34 +480,34 @@ async function initApi() {
 }
 async function remoteGet(key) {
   if (!apiReady) return null;
-  try { const r = await fetch(`${API_STORE}?key=${encodeURIComponent(key)}`); if (!r.ok) return null; const d = await r.json(); return d.value ?? null; }
+  try { const r = await fetch(`${API_STORE}?key=${encodeURIComponent(key)}`, CREDS); if (!r.ok) return null; const d = await r.json(); return d.value ?? null; }
   catch (e) { console.warn('remoteGet', e); return null; }
 }
 // Distinguishes "server said empty" from "read failed" so we never stamp a
 // blank state over live data under load.
 async function remoteGetStatus(key) {
   if (!apiReady) return { ok: false };
-  try { const r = await fetch(`${API_STORE}?key=${encodeURIComponent(key)}`); if (!r.ok) return { ok: false }; const d = await r.json(); return { ok: true, value: d.value ?? null }; }
+  try { const r = await fetch(`${API_STORE}?key=${encodeURIComponent(key)}`, CREDS); if (!r.ok) return { ok: false }; const d = await r.json(); return { ok: true, value: d.value ?? null }; }
   catch (e) { console.warn('remoteGetStatus', e); return { ok: false }; }
 }
 async function remoteSet(key, value) {
   if (!apiReady) return false;
-  try { const r = await fetch(API_STORE, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ key, value }) }); return r.ok; }
+  try { const r = await fetch(API_STORE, { ...JSON_POST, body: JSON.stringify({ key, value }) }); return r.ok; }
   catch (e) { console.warn('remoteSet', e); return false; }
 }
 async function remoteList(prefix) {
   if (!apiReady) return [];
-  try { const r = await fetch(`${API_STORE}?prefix=${encodeURIComponent(prefix)}`); if (!r.ok) return []; const d = await r.json(); return Array.isArray(d.keys) ? d.keys : []; }
+  try { const r = await fetch(`${API_STORE}?prefix=${encodeURIComponent(prefix)}`, CREDS); if (!r.ok) return []; const d = await r.json(); return Array.isArray(d.keys) ? d.keys : []; }
   catch (e) { console.warn('remoteList', e); return []; }
 }
 async function remoteDeleteKeys(keys) {
   if (!apiReady || !keys.length) return false;
-  try { const r = await fetch(API_STORE, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'delete', keys }) }); return r.ok; }
+  try { const r = await fetch(API_STORE, { ...JSON_POST, body: JSON.stringify({ action:'delete', keys }) }); return r.ok; }
   catch (e) { console.warn('remoteDeleteKeys', e); return false; }
 }
 async function remoteWipePrefix(prefix) {
   if (!apiReady) return false;
-  try { const r = await fetch(API_STORE, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'wipe', prefix }) }); return r.ok; }
+  try { const r = await fetch(API_STORE, { ...JSON_POST, body: JSON.stringify({ action:'wipe', prefix }) }); return r.ok; }
   catch (e) { console.warn('remoteWipePrefix', e); return false; }
 }
 function parseStored(v) { try { return v ? JSON.parse(v) : null; } catch { return null; } }
@@ -563,10 +570,28 @@ async function checkEpoch() {
 // ============================================================
 async function verifyGoogleCredential(credential) {
   try {
-    const r = await fetch(API_AUTH, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ credential }) });
+    const r = await fetch(API_AUTH, { ...JSON_POST, body: JSON.stringify({ credential }) });
     if (!r.ok) return { ok:false };
     return await r.json();
   } catch (e) { console.warn('google verify', e); return { ok:false }; }
+}
+// "Who am I?" — reads the signed HttpOnly session cookie on the server and
+// reports back the verified identity plus whether that identity is an admin.
+// isAdmin is DECIDED ON THE SERVER (ADMIN_EMAILS env var) and is never
+// something this page can talk itself into: faking it in devtools only paints
+// a dashboard whose every button the API will still reject with 403.
+async function fetchSession() {
+  try {
+    const r = await fetch(API_AUTH, CREDS);
+    if (!r.ok) return { ok:false, isAdmin:false };
+    const d = await r.json();
+    return { ok: !!d.ok, sub: d.sub, email: d.email, name: d.name, isAdmin: !!d.isAdmin };
+  } catch (e) { console.warn('session check', e); return { ok:false, isAdmin:false }; }
+}
+// Clears the session cookie server-side. Without this, "switch" only forgot
+// the name locally and left a valid session cookie behind on the device.
+async function serverLogout() {
+  try { await fetch(API_AUTH + '?logout=1', { method:'POST', credentials:'same-origin' }); } catch {}
 }
 // Google Identity Services uses one global callback; dispatch to the active handler.
 const _gsiHandlerRef = { current: null };
@@ -583,34 +608,10 @@ async function googleFindAccount(sub) {
   if (map && map.name) { const rec = await getShared("pp_pred:" + map.name); if (rec) return { ok:true, name: map.name }; }
   return { ok:false };
 }
-// Create a new Google-linked pundit, or link Google to an existing account
-// (an existing password account requires its password to prove ownership).
-async function googleCreateOrLink(g, name, password) {
-  const clean = (name || "").trim();
-  if (!clean) return { ok:false, error:"Pick a display name" };
-  if (clean.length > 30) return { ok:false, error:"Keep the name under 30 characters" };
-  const existing = await getShared("pp_pred:" + clean);
-  const write = async (rec) => { await setShared("pp_pred:" + clean, rec); await setShared("pp_google:" + g.sub, { name: clean }); return { ok:true, name: clean }; };
-  if (!existing) return write({ name: clean, joined: Date.now(), googleSub: g.sub, email: g.email, scores:{}, teamPick:{}, f4:{}, survivor:{}, bonusAnswers:{} });
-  if (existing.googleSub && existing.googleSub === g.sub) return write(existing);
-  if (existing.googleSub && existing.googleSub !== g.sub) return { ok:false, error:"That name is taken. Please choose another." };
-  if (existing.passwordHash) {
-    const hash = await hashPassword(password || "", existing.salt);
-    if (hash !== existing.passwordHash) return { ok:false, error:"That name already has a password — enter it to link Google, or pick a new name." };
-    return write({ ...existing, googleSub: g.sub, email: g.email });
-  }
-  return write({ ...existing, googleSub: g.sub, email: g.email });
-}
-// Link a Google account to the currently signed-in pundit.
-async function googleLinkTo(user, g) {
-  const map = await getShared("pp_google:" + g.sub);
-  if (map && map.name && map.name !== user) return { ok:false, error:"That Google account is already linked to " + map.name };
-  const rec = await getShared("pp_pred:" + user);
-  if (!rec) return { ok:false, error:"Account not found — refresh and try again" };
-  await setShared("pp_pred:" + user, { ...rec, googleSub: g.sub, email: g.email });
-  await setShared("pp_google:" + g.sub, { name: user });
-  return { ok:true };
-}
+// NOTE: the old googleCreateOrLink() / googleLinkTo() helpers lived here. They
+// were dead code (LoginView uses googleClaimName) and carried the last
+// password-comparison logic in the app. Deleted — login is Google-only now, so
+// there is no password path left for anyone to attack or bypass.
 
 // ============================================================
 // FPL CLIENT (via /api/fpl proxy) with localStorage caching so we
@@ -690,18 +691,18 @@ async function fplAllFixtures(force) {
 // ============================================================
 // CONSTANTS
 // ============================================================
-const ADMIN_USERNAME = "PPADMIN";
-const ADMIN_PASSWORD = "Propundit007!@";     // fallback admin passcode (used only if ADMIN_EMAILS is empty)
-// Google emails that get admin access automatically (no passcode). Add your own
-// Google email here to make admin fully passwordless. If left empty, the passcode
-// above is used as a fallback so you're never locked out.
-const ADMIN_EMAILS = [];
-const EXPORT_LOGINS = [
-  { username: "PPDATA", password: "Ppdata2026!@" },
-];
-// Google Sign-In (optional): paste your OAuth 2.0 "Web application" client ID from
-// the Google Cloud console to enable the "Continue with Google" button. Leave the
-// string empty to hide Google login entirely (name/password still works).
+// ---------------------------------------------------------------------------
+// NO SECRETS LIVE IN THIS FILE. Anything here ships to every visitor's browser
+// and is readable via View Source — the old ADMIN_USERNAME / ADMIN_PASSWORD /
+// EXPORT_LOGINS constants that used to sit right here were the whole reason
+// the admin page could be walked into. Admin access is now decided ONLY by the
+// server, from the ADMIN_EMAILS environment variable in Vercel, checked against
+// a Google identity this page cannot forge.
+// ---------------------------------------------------------------------------
+
+// Google Sign-In: your OAuth 2.0 "Web application" client ID from the Google
+// Cloud console. This one is *meant* to be public (Google's own button needs
+// it client-side) — it is an identifier, not a secret.
 const GOOGLE_CLIENT_ID = "901965344611-g2cc7mpeqf1fj8pismatrrd4oer6nr1i.apps.googleusercontent.com";
 const APP_VERSION = 20260208;   // bump on every deploy — clients on an older build get flushed automatically
 const TOTAL_GW = 38;
@@ -734,19 +735,12 @@ function defaultState() {
 }
 
 // ============================================================
-// PASSWORD HASHING (SHA-256 + per-user salt)
+// (Password hashing removed.)
+// Sign-in is Google-only and verified server-side, so the app no longer stores
+// or compares passwords at all. Browser-side hashing was never a real defence
+// anyway: the hash, the salt and the comparison all ran on the attacker's own
+// machine, where any of the three can simply be edited.
 // ============================================================
-async function hashPassword(password, salt) {
-  const enc = new TextEncoder();
-  const buf = await crypto.subtle.digest('SHA-256', enc.encode(password + "::" + salt));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-function makeSalt() { return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + Date.now().toString(36); }
-async function makeUserRecord(name, password) {
-  const salt = makeSalt();
-  const passwordHash = await hashPassword(password, salt);
-  return { name, joined: Date.now(), salt, passwordHash, scores: {}, teamPick: {}, f4: {}, survivor: {}, bonusAnswers: {} };
-}
 
 // ============================================================
 // SCORING ENGINE (unit-tested separately — see scoring.test.js)
@@ -1050,8 +1044,9 @@ function App() {
   const [fpl, setFpl] = useState({ boot: null, fixturesByGW: {}, liveByGW: {} });
   const [view, setView] = useState("home");
   const [toast, setToast] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [adminRole, setAdminRole] = useState(null);
+  // Admin flag comes from the server's whoami response and nowhere else.
+  const [session, setSession] = useState({ ok:false, isAdmin:false });
+  const isAdmin = !!session.isAdmin;
   const [remoteAvailable, setRemoteAvailable] = useState(false);
   const [fplBusy, setFplBusy] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
@@ -1153,6 +1148,12 @@ function App() {
     (async () => {
       const ready = await initApi();
       setRemoteAvailable(ready);
+      // Ask the server who we are BEFORE trusting any locally-remembered name.
+      // No valid session cookie => no session => back to the Google button,
+      // no matter what localStorage claims.
+      const who = await fetchSession();
+      setSession(who);
+      if (!who.ok) { try { localStorage.removeItem("current_user"); } catch {} setUser(null); setLoading(false); return; }
       if (await checkEpoch()) return;   // stale generation -> clears local + reloads
       const savedUser = await getPersonal("current_user");
       if (savedUser) setUser(savedUser);
@@ -1161,9 +1162,22 @@ function App() {
     })();
   }, [refreshAll]);
 
-  // poll shared state + live GW only (light)
+  // Re-check the session periodically so a revoked/expired one drops the admin
+  // deck and the signed-in state instead of lingering until a manual refresh.
   useEffect(() => {
-    if (!remoteAvailable) return;
+    if (!remoteAvailable || !user) return;
+    const id = setInterval(async () => {
+      const who = await fetchSession();
+      setSession(who);
+      if (!who.ok) { setUser(null); try { localStorage.removeItem("current_user"); } catch {} }
+    }, SYNC_POLL_MS * 4);
+    return () => clearInterval(id);
+  }, [remoteAvailable, user]);
+
+  // poll shared state + live GW only (light). Requires a session — polling
+  // while signed out would just be a stream of 401s.
+  useEffect(() => {
+    if (!remoteAvailable || !user) return;
     const id = setInterval(async () => {
       if (await checkEpoch()) return;
       const s = await refreshState();
@@ -1173,11 +1187,15 @@ function App() {
       setFpl(prev => ({ ...prev, fixturesByGW: { ...prev.fixturesByGW, [active]: fx }, liveByGW: { ...prev.liveByGW, [active]: lv } }));
     }, SYNC_POLL_MS);
     return () => clearInterval(id);
-  }, [remoteAvailable, refreshState]);
+  }, [remoteAvailable, refreshState, user]);
 
   // App-version beacon: advertise the newest build, and flush stale ones.
+  // Publishing pp_ver is an admin-only write now, so the "newer version"
+  // signal goes out when you (the admin) load a fresh deploy; everyone still
+  // on an older build then gets the reload banner. Non-admin writes just
+  // fail quietly, which is the intended behaviour.
   useEffect(() => {
-    if (!remoteAvailable) return;
+    if (!remoteAvailable || !user) return;
     let stop = false;
     const check = async () => {
       try {
@@ -1198,17 +1216,27 @@ function App() {
     check();
     const id = setInterval(check, SYNC_POLL_MS);
     return () => { stop = true; clearInterval(id); };
-  }, [remoteAvailable]);
+  }, [remoteAvailable, user]);
 
   // Pull the freshest roster when opening a view that lists every pundit.
-  useEffect(() => { if (remoteAvailable && (view === "leaderboard" || view === "admin")) { loadUsers(); } }, [view, remoteAvailable]);
+  useEffect(() => { if (remoteAvailable && user && (view === "leaderboard" || view === "admin")) { loadUsers(); } }, [view, remoteAvailable, user]);
+
+  // If admin rights go away (session expired, email removed from ADMIN_EMAILS)
+  // while the admin deck is open, leave it immediately.
+  useEffect(() => { if (view === "admin" && !isAdmin) setView("home"); }, [view, isAdmin]);
 
   const login = useCallback(async (name) => {
     const clean = name.trim(); if (!clean) return;
-    setUser(clean); await setPersonal("current_user", clean); await refreshAll(false);
+    setUser(clean); await setPersonal("current_user", clean);
+    // Pick up the freshly-issued session (and therefore admin status) right
+    // away, so the Admin tab appears without needing a page reload.
+    setSession(await fetchSession());
+    await refreshAll(false);
   }, [refreshAll]);
   const logout = useCallback(async () => {
-    setUser(null); setIsAdmin(false); setAdminRole(null); await setPersonal("current_user", "");
+    await serverLogout();                 // kill the cookie, not just the local name
+    setUser(null); setSession({ ok:false, isAdmin:false }); setView("home");
+    await setPersonal("current_user", "");
   }, []);
 
   const myPred = useMemo(() => (!user || !users) ? null : users.find(u => u.name === user), [user, users]);
@@ -1265,41 +1293,20 @@ function App() {
     return { ok:true };
   }, [user, loadUsers]);
 
-  const changeMyPassword = useCallback(async (oldPw, newPw) => {
-    if (!user) return { ok:false, msg:"Not signed in" };
-    const rec = await getShared("pp_pred:" + user);
-    if (!rec) return { ok:false, msg:"Account not found — refresh and try again" };
-    if (rec.passwordHash) {
-      const h = await hashPassword(oldPw, rec.salt);
-      if (h !== rec.passwordHash) return { ok:false, msg:"Current password is wrong" };
-    }
-    const salt = makeSalt();
-    const passwordHash = await hashPassword(newPw, salt);
-    await setShared("pp_pred:" + user, { ...rec, salt, passwordHash });
-    setUsers(prev => prev.map(x => x.name === user ? { ...x, salt, passwordHash } : x));
-    return { ok:true };
-  }, [user]);
+  // changeMyPassword() / adminSetPassword() removed — there are no passwords.
 
-  const adminSetPassword = useCallback(async (name, newPw) => {
-    const rec = await getShared("pp_pred:" + name);
-    if (!rec) return { ok:false, msg:"User not found" };
-    const salt = makeSalt();
-    const passwordHash = await hashPassword(newPw, salt);
-    await setShared("pp_pred:" + name, { ...rec, salt, passwordHash });
-    await loadUsers();
-    return { ok:true };
-  }, [loadUsers]);
-
-  const adminAddUser = useCallback(async (name, pw) => {
+  // Creates a placeholder pundit with no Google link. The server only permits
+  // this for an admin session — it is the one legitimate way an account can
+  // exist without someone having signed in with Google, and it is exactly the
+  // path that used to be wide open to everybody.
+  const adminAddUser = useCallback(async (name) => {
     const clean = (name || "").trim();
     if (!clean) return { ok:false, msg:"Enter a name" };
     if (clean.length > 30) return { ok:false, msg:"Keep the name under 30 characters" };
     const existing = await getShared("pp_pred:" + clean);
     if (existing) return { ok:false, msg:"That name already exists" };
-    const rec = (pw && pw.trim())
-      ? await makeUserRecord(clean, pw.trim())
-      : { name: clean, joined: Date.now(), scores:{}, teamPick:{}, f4:{}, survivor:{}, bonusAnswers:{} };
-    await setShared("pp_pred:" + clean, rec);
+    const ok = await remoteSet("pp_pred:" + clean, { name: clean, joined: Date.now(), scores:{}, teamPick:{}, f4:{}, survivor:{}, bonusAnswers:{} });
+    if (!ok) return { ok:false, msg:"Server refused — are you signed in as an admin?" };
     await loadUsers();
     return { ok:true };
   }, [loadUsers]);
@@ -1326,6 +1333,14 @@ function App() {
     );
   }
   if (!user) return <LoginView onLogin={login} remoteAvailable={remoteAvailable} />;
+  // League data is only fetched once a session exists, so between "signed in"
+  // and "data arrived" there is a brief gap. Hold the loading screen instead of
+  // rendering the app against a null state.
+  if (!state) return (
+    <div className="login-wrap">
+      <div style={{ fontFamily: 'Anton', fontSize: 32, letterSpacing: '0.04em', color: 'var(--ink-mute)' }}>LOADING…</div>
+    </div>
+  );
 
   return (
     <>
@@ -1353,7 +1368,10 @@ function App() {
           <button className={view==="picks"?"active":""} onClick={()=>setView("picks")}>Picks</button>
           <button className={view==="leaderboard"?"active":""} onClick={()=>setView("leaderboard")}>Leaderboard</button>
           <button className={view==="rules"?"active":""} onClick={()=>setView("rules")}>Rules</button>
-          <button className={view==="admin"?"active":""} onClick={()=>setView("admin")}>Admin</button>
+          {/* The Admin tab only exists for a server-verified admin email. Even if
+              someone forces this button to render, /api/store rejects every
+              admin-only write from a non-admin session with a 403. */}
+          {isAdmin && <button className={view==="admin"?"active":""} onClick={()=>setView("admin")}>Admin</button>}
         </nav>
 
         {view==="home" && <HomeView state={state} user={user} myPred={myPred} standings={standings} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} setView={setView} goPredict={goPredict} survivorPts={survivorPts} />}
@@ -1362,7 +1380,7 @@ function App() {
         {view==="picks" && <PicksView state={state} users={users} currentUser={user} fpl={fpl} />}
         {view==="leaderboard" && <LeaderboardView standings={standings} currentUser={user} state={state} users={users} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} survivorPts={survivorPts} survivorWins={survivorWins} />}
         {view==="rules" && <RulesView state={state} />}
-        {view==="admin" && <AdminView state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} isAdmin={isAdmin} setIsAdmin={setIsAdmin} adminRole={adminRole} setAdminRole={setAdminRole} showToast={showToast} onRefresh={()=>refreshAll(true)} adminAddUser={adminAddUser} adminSetPassword={adminSetPassword} adminDeleteUser={adminDeleteUser} setSurvivorOn={setSurvivorOn} iAmAdmin={!!(myPred && myPred.email && ADMIN_EMAILS.some(e=>e && e.toLowerCase()===String(myPred.email).toLowerCase()))} />}
+        {view==="admin" && <AdminView state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} isAdmin={isAdmin} adminEmail={session.email} showToast={showToast} onRefresh={()=>refreshAll(true)} adminAddUser={adminAddUser} adminDeleteUser={adminDeleteUser} setSurvivorOn={setSurvivorOn} />}
 
         <footer className="app-footer">
           Pro Pundit League · <span className="accent">Season 6</span> · Put those pundit hats on
@@ -2898,62 +2916,30 @@ function buildLeaderboardCSV(standings) {
 // ============================================================
 // ADMIN
 // ============================================================
-function AdminView({ state, users, standings, fpl, updateState, isAdmin, setIsAdmin, adminRole, setAdminRole, showToast, onRefresh, adminAddUser, adminSetPassword, adminDeleteUser, setSurvivorOn, iAmAdmin }) {
-  const [u, setU] = useState(""); const [p, setP] = useState(""); const [err, setErr] = useState("");
-  const doLogin = () => {
-    if (u === ADMIN_USERNAME && p === ADMIN_PASSWORD) { setIsAdmin(true); setAdminRole("full"); setErr(""); return; }
-    const ex = EXPORT_LOGINS.find(x => x.username === u && x.password === p);
-    if (ex) { setIsAdmin(true); setAdminRole("export"); setErr(""); return; }
-    setErr("Wrong username or password");
-  };
-  const authed = isAdmin || iAmAdmin;
-  const role = iAmAdmin ? "full" : adminRole;
-
-  if (!authed) {
-    if (ADMIN_EMAILS.length > 0) {
-      return (
-        <div>
-          <div className="page-head"><div className="eyebrow">RESTRICTED</div><h1 className="page-title">ADMIN <span className="it">only.</span></h1></div>
-          <div className="login-card" style={{ maxWidth:420, margin:'0 auto' }}>
-            <p className="helper" style={{ marginTop:0 }}>Admin access is tied to specific Google accounts. Sign in with an admin Google account to manage the league.</p>
-          </div>
-        </div>
-      );
-    }
+// There is no admin login form any more, because there is nothing to log in
+// WITH. `isAdmin` arrives from GET /api/auth, which reads the signed HttpOnly
+// session cookie and compares the Google email against the server's
+// ADMIN_EMAILS list. This component cannot be talked into granting access, and
+// even if someone patches it to render, every write it offers is independently
+// re-authorised by /api/store against the same server-side list.
+function AdminView({ state, users, standings, fpl, updateState, isAdmin, adminEmail, showToast, onRefresh, adminAddUser, adminDeleteUser, setSurvivorOn }) {
+  if (!isAdmin) {
     return (
       <div>
         <div className="page-head"><div className="eyebrow">RESTRICTED</div><h1 className="page-title">ADMIN <span className="it">only.</span></h1></div>
-        <div className="login-card" style={{ maxWidth:420, margin:'0 auto' }}>
-          <div className="field"><label>Username</label><input value={u} onChange={e=>setU(e.target.value)} placeholder="admin username" /></div>
-          <div className="field"><label>Password</label><input type="password" value={p} onChange={e=>setP(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doLogin()} placeholder="admin password" /></div>
-          {err && <div style={{ color:'var(--red)', fontSize:13, marginBottom:12 }}>{err}</div>}
-          <button className="btn btn-primary" onClick={doLogin} style={{ width:'100%', justifyContent:'center' }}>Enter →</button>
+        <div className="login-card" style={{ maxWidth:440, margin:'0 auto' }}>
+          <p className="helper" style={{ marginTop:0 }}>
+            The admin deck is tied to one specific Google account. There is no admin password to enter —
+            if you're signed in with an approved account it appears automatically.
+          </p>
         </div>
       </div>
     );
   }
-  if (role === "export") return <ExportOnlyDashboard users={users} standings={standings} state={state} fpl={fpl} />;
-  return <AdminDashboard state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} showToast={showToast} onRefresh={onRefresh} adminAddUser={adminAddUser} adminSetPassword={adminSetPassword} adminDeleteUser={adminDeleteUser} setSurvivorOn={setSurvivorOn} />;
+  return <AdminDashboard state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} showToast={showToast} onRefresh={onRefresh} adminAddUser={adminAddUser} adminDeleteUser={adminDeleteUser} setSurvivorOn={setSurvivorOn} adminEmail={adminEmail} />;
 }
 
-function ExportOnlyDashboard({ users, standings, state, fpl }) {
-  return (
-    <div>
-      <div className="page-head"><div className="eyebrow">DATA EXPORT</div><h1 className="page-title">EXPORT <span className="it">only.</span></h1>
-        <p className="page-sub">Download the league data as CSV. This login can't change any settings.</p></div>
-      <div className="grid grid-3">
-        <div className="card"><div className="card-title" style={{fontSize:18}}>Picks</div><p className="helper">Every pundit's predictions (scores, team, F4) with edit timestamps.</p>
-          <button className="btn btn-go" style={{ marginTop:14, width:'100%', justifyContent:'center' }} onClick={()=>downloadCSV("propundit_picks.csv", buildPicksCSV(users, state, fpl))}>⬇ Picks CSV</button></div>
-        <div className="card"><div className="card-title" style={{fontSize:18}}>Results</div><p className="helper">Per-gameweek points for each pundit across all three sections.</p>
-          <button className="btn btn-go" style={{ marginTop:14, width:'100%', justifyContent:'center' }} onClick={()=>downloadCSV("propundit_results.csv", buildResultsCSV(users, state, fpl))}>⬇ Results CSV</button></div>
-        <div className="card"><div className="card-title" style={{fontSize:18}}>Leaderboard</div><p className="helper">Season totals and section breakdown, ranked.</p>
-          <button className="btn btn-go" style={{ marginTop:14, width:'100%', justifyContent:'center' }} onClick={()=>downloadCSV("propundit_leaderboard.csv", buildLeaderboardCSV(standings))}>⬇ Leaderboard CSV</button></div>
-      </div>
-    </div>
-  );
-}
-
-function AdminDashboard({ state, users, standings, fpl, updateState, showToast, onRefresh, adminAddUser, adminSetPassword, adminDeleteUser, setSurvivorOn }) {
+function AdminDashboard({ state, users, standings, fpl, updateState, showToast, onRefresh, adminAddUser, adminDeleteUser, setSurvivorOn, adminEmail }) {
   const boot = fpl.boot;
   const now = Date.now();
   const activeGW = state.activeGW || 1;
@@ -2963,26 +2949,12 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
   const fixtures = (fpl.fixturesByGW && fpl.fixturesByGW[fxGW]) || [];
   const selIds = (state.selectedFixtures && state.selectedFixtures[fxGW]) || [];
   const [newQ, setNewQ] = useState({ text: "", options: "", points: 3, type: "text" });
-  const [pwInputs, setPwInputs] = useState({});
-  const [newUser, setNewUser] = useState({ name: "", pw: "" });
   const namedUsers = (users || []).filter(u => u.name).sort((a,b)=>a.name.localeCompare(b.name));
-  const doSetPw = async (name) => {
-    const pw = (pwInputs[name]||"").trim();
-    if (pw.length < 4) { showToast("Password must be at least 4 characters"); return; }
-    const r = await adminSetPassword(name, pw);
-    if (r && r.ok) { showToast("Password reset for " + name); setPwInputs(pp => ({ ...pp, [name]: "" })); }
-    else showToast((r && r.msg) || "Couldn't reset password");
-  };
   const doDeleteUser = async (name) => {
     if (!window.confirm("Delete " + name + "? This removes their account and all their picks. No undo.")) return;
     const r = await adminDeleteUser(name);
     if (r && r.ok) showToast(name + " deleted");
     else showToast((r && r.msg) || "Couldn't delete");
-  };
-  const doAddUser = async () => {
-    const r = await adminAddUser(newUser.name, newUser.pw);
-    if (r && r.ok) { showToast("Added " + newUser.name.trim()); setNewUser({ name: "", pw: "" }); }
-    else showToast((r && r.msg) || "Couldn't add pundit");
   };
   const bonusList = (state.bonus && state.bonus[activeGW]) || [];
   const bonusTeamOpts = (boot && boot.teams) ? Object.values(boot.teams).slice().sort((a,b)=>a.name.localeCompare(b.name)) : [];
@@ -3058,7 +3030,11 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
 
   return (
     <div>
-      <div className="page-head"><div className="eyebrow">CONTROL ROOM</div><h1 className="page-title">ADMIN <span className="it">deck.</span></h1></div>
+      <div className="page-head">
+        <div className="eyebrow">CONTROL ROOM</div>
+        <h1 className="page-title">ADMIN <span className="it">deck.</span></h1>
+        <p className="page-sub" style={{ fontSize:14 }}>Signed in as <strong style={{ color:'var(--ink)' }}>{adminEmail || "an approved admin account"}</strong> — verified by Google on the server. Only accounts on the server's admin list can see or use this page.</p>
+      </div>
 
       <div className="grid grid-2">
         <div className="card">
