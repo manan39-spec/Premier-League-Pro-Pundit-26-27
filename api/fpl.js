@@ -11,6 +11,13 @@
 //       -> { points:{ [playerId]: gwPoints } }
 //
 // Cached briefly at the edge to stay well under any rate limits.
+//
+// CHANGED: now requires a signed-in session. There is no user data here, so it
+// was never a data-leak risk — but as an open endpoint on your domain anyone
+// could have pointed a script at it and burned your Vercel function budget.
+// Only league members need it, so only league members can call it.
+import { readSession } from './_session.js';
+
 const FPL = 'https://fantasy.premierleague.com/api';
 const POS = { 1: 'GK', 2: 'DEF', 3: 'MID', 4: 'FWD' };
 
@@ -23,6 +30,8 @@ async function fplFetch(path) {
 }
 
 export default async function handler(req, res) {
+  if (!readSession(req)) return res.status(401).json({ error: 'sign in required' });
+
   const resource = req.query.resource || 'bootstrap';
   try {
     if (resource === 'bootstrap') {
@@ -54,7 +63,8 @@ export default async function handler(req, res) {
       }));
       const cur = events.find(e => e.isCurrent);
       const nxt = events.find(e => e.isNext);
-      res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
+      // private => the shared CDN won't serve this to an unauthenticated caller.
+      res.setHeader('Cache-Control', 'private, max-age=300');
       return res.status(200).json({
         teams, players, events,
         currentGW: cur ? cur.id : null,
@@ -82,7 +92,7 @@ export default async function handler(req, res) {
         kickoff: f.kickoff_time,
       }));
       // The all-season response is bigger and changes rarely -> cache it longer.
-      res.setHeader('Cache-Control', gw ? 's-maxage=60, stale-while-revalidate=120' : 's-maxage=600, stale-while-revalidate=1800');
+      res.setHeader('Cache-Control', gw ? 'private, max-age=60' : 'private, max-age=600');
       return res.status(200).json({ fixtures: out });
     }
 
@@ -94,7 +104,7 @@ export default async function handler(req, res) {
       (data.elements || []).forEach(e => {
         points[e.id] = (e.stats && typeof e.stats.total_points === 'number') ? e.stats.total_points : 0;
       });
-      res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120');
+      res.setHeader('Cache-Control', 'private, max-age=60');
       return res.status(200).json({ points });
     }
 
