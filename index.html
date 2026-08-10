@@ -90,6 +90,19 @@
   .fdr-td { padding:4px 4px; border-bottom:1px solid var(--line); text-align:center; }
   .fdr-chip { min-width:66px; text-align:center; font-family:'JetBrains Mono', monospace; font-size:11px; font-weight:700; padding:8px 6px; border-radius:6px; letter-spacing:0.01em; margin:2px auto; white-space:nowrap; }
   .fdr-blank { min-width:66px; text-align:center; color:var(--ink-mute); font-family:'JetBrains Mono', monospace; padding:8px 6px; }
+  /* current gameweek column marker — a tinted column plus an accent cap on the
+     header, so it reads as "now" without competing with the FDR chip colours */
+  /* Vertical rails down both edges read far better than a background tint,
+     which the FDR chips would otherwise cover up. */
+  .fdr-th.fdr-now { background:rgba(233,0,82,0.16); color:var(--ink);
+    box-shadow: inset 0 3px 0 var(--accent), inset 1px 0 0 var(--accent), inset -1px 0 0 var(--accent); }
+  .fdr-td.fdr-now { background:rgba(233,0,82,0.07);
+    box-shadow: inset 1px 0 0 rgba(233,0,82,0.5), inset -1px 0 0 rgba(233,0,82,0.5); }
+  tr:last-child .fdr-td.fdr-now {
+    box-shadow: inset 1px 0 0 rgba(233,0,82,0.5), inset -1px 0 0 rgba(233,0,82,0.5), inset 0 -3px 0 var(--accent); }
+  .fdr-now-tag { display:block; margin-top:2px; font-size:8px; letter-spacing:0.16em; font-weight:700; color:var(--accent); }
+  html.light .fdr-th.fdr-now { background:rgba(233,0,82,0.10); }
+  html.light .fdr-td.fdr-now { background:rgba(233,0,82,0.045); }
   .fdr-key { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
   .fdr-key-lbl, .fdr-key-ends { font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--ink-mute); }
   .fdr-key-box { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:5px; font-family:'JetBrains Mono', monospace; font-size:11px; font-weight:700; }
@@ -1854,12 +1867,35 @@ function FdrGrid({ state, fpl }) {
   const [all, setAll] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
   const scrollRef = useRef(null);
+  const nowRef = useRef(null);      // the current gameweek's <th>
+  const didJump = useRef(false);
   useEffect(() => {
     let alive = true;
     fplAllFixtures().then(fx => { if (alive) setAll(fx || []); }).catch(() => { if (alive) setAll([]); });
     return () => { alive = false; };
   }, []);
   const scrollBy = (dx) => { if (scrollRef.current) scrollRef.current.scrollBy({ left: dx, behavior: 'smooth' }); };
+  // The gameweek the league is actually on — same value the Fixtures and
+  // Predict tabs call "current", so the whole app agrees on what "now" means.
+  const curGW = (state && state.activeGW) || (boot && boot.currentGW) || null;
+  const jumpToNow = (smooth) => {
+    const wrap = scrollRef.current, th = nowRef.current;
+    if (!wrap || !th) return;
+    // Land the current week flush against the sticky team column — measured, not
+    // guessed, so no half-clipped column peeks out from underneath it. Setting
+    // scrollLeft directly (rather than scrollIntoView) keeps the page from
+    // also jumping vertically.
+    const teamCol = wrap.querySelector('.fdr-th-team');
+    const left = Math.max(0, th.offsetLeft - (teamCol ? teamCol.offsetWidth : 132));
+    if (smooth && wrap.scrollTo) wrap.scrollTo({ left, behavior: 'smooth' });
+    else wrap.scrollLeft = left;
+  };
+  // Open the grid already showing the current week instead of back at GW1.
+  useEffect(() => {
+    if (didJump.current || all === null || !curGW) return;
+    didJump.current = true;
+    requestAnimationFrame(() => jumpToNow(false));
+  }, [all, curGW]);
 
   if (!boot || !boot.teams) return <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>⚠️ Couldn't load FPL data. The FDR grid works once deployed on Vercel; if you're live, hit Refresh on the Home tab.</div>;
   if (all === null) return <div className="empty-mini">Loading fixture difficulty…</div>;
@@ -1879,6 +1915,7 @@ function FdrGrid({ state, fpl }) {
         </div>
         <div style={{ display:'flex', gap:8 }}>
           <button className="btn btn-sm btn-ghost" onClick={()=>scrollBy(-340)}>‹ Prev</button>
+          {curGW && <button className="btn btn-sm" onClick={()=>jumpToNow(true)} title={"Jump to gameweek " + curGW}>◎ GW{curGW}</button>}
           <button className="btn btn-sm btn-ghost" onClick={()=>scrollBy(340)}>Next ›</button>
         </div>
       </div>
@@ -1888,9 +1925,16 @@ function FdrGrid({ state, fpl }) {
             <thead>
               <tr>
                 <th className="fdr-th-team" onClick={()=>setSortDir(d=>d==="asc"?"desc":"asc")} title="Sort by team name">Team {sortDir==="asc"?"▲":"▼"}</th>
-                {gws.map(g => (
-                  <th key={g} className="fdr-th">GW{g}<div className="fdr-th-date">{gwDate[g] ? new Date(gwDate[g]).toLocaleDateString(undefined,{month:'short',day:'numeric'}) : ""}</div></th>
-                ))}
+                {gws.map(g => {
+                  const isNow = g === curGW;
+                  return (
+                    <th key={g} className={"fdr-th" + (isNow ? " fdr-now" : "")} ref={isNow ? nowRef : null} title={isNow ? "Current gameweek" : undefined}>
+                      GW{g}
+                      <div className="fdr-th-date">{gwDate[g] ? new Date(gwDate[g]).toLocaleDateString(undefined,{month:'short',day:'numeric'}) : ""}</div>
+                      {isNow && <span className="fdr-now-tag">NOW</span>}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -1900,7 +1944,7 @@ function FdrGrid({ state, fpl }) {
                   {gws.map(g => {
                     const arr = (byTeam[t.short] && byTeam[t.short][g]) || [];
                     return (
-                      <td key={g} className="fdr-td">
+                      <td key={g} className={"fdr-td" + (g === curGW ? " fdr-now" : "")}>
                         {arr.length === 0
                           ? <div className="fdr-blank">—</div>
                           : arr.map((x,i) => { const c = fdrColor(x.diff); return <div key={i} className="fdr-chip" style={{ background:c.bg, color:c.fg }}>{x.opp} ({x.ha})</div>; })}
@@ -1913,7 +1957,7 @@ function FdrGrid({ state, fpl }) {
           </table>
         </div>
       </div>
-      <p className="helper" style={{ marginTop:12 }}>Colour = FPL fixture difficulty from that club's perspective (1 easiest, 5 hardest). Swipe sideways or use Prev / Next to see more weeks. Tap "Team" to flip the order. Handy for planning team of the week, survivor and the Fantastic Four.</p>
+      <p className="helper" style={{ marginTop:12 }}>Colour = FPL fixture difficulty from that club's perspective (1 easiest, 5 hardest). {curGW ? <>The <strong style={{ color:'var(--accent)' }}>highlighted GW{curGW}</strong> column is the current gameweek — the grid opens there, and "◎ GW{curGW}" jumps back to it. </> : null}Swipe sideways or use Prev / Next to see more weeks. Tap "Team" to flip the order. Handy for planning team of the week, survivor and the Fantastic Four.</p>
     </div>
   );
 }
