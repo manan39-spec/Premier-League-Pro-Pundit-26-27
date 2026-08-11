@@ -2567,7 +2567,7 @@ function SurvivorTab({ state, myPred, fpl, survivorRounds, updateMyPred, showToa
   return (
     <div>
       {roundHead}
-      <p className="helper" style={{ marginBottom:12 }}>Pick one team to <strong>win</strong> GW{gw}. Win → you advance. Draw, loss or no pick → you're out. Each team is usable once per round.{topN.length ? <> The <strong>top {topN.length}</strong> can't be picked at all, and you can't pick the opponent of a bottom-3 side.</> : <> You can't pick the opponent of a bottom-3 side and club that are in Top 3 of the table.</>}</p>
+      <p className="helper" style={{ marginBottom:12 }}>Pick one team to <strong>win</strong> GW{gw}. Win → you advance. Draw, loss or no pick → you're out. Each team is usable once per round.{topN.length ? <> The <strong>top {topN.length}</strong> can't be picked at all, and you can't pick the opponent of a bottom-3 side.</> : <> You cannot pick the opponent of a team in the bottom 3 of the league table or any club currently in the top 3 of the league table.</>}</p>
       {(topN.length > 0 || bottom3.length > 0) && (
         <div className="card" style={{ marginBottom:14, padding:'12px 14px', display:'grid', gap:10 }}>
           {topN.length > 0 && (
