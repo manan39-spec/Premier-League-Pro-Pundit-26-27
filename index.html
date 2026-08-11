@@ -742,6 +742,7 @@ function defaultState() {
     scoring: DEFAULT_SCORING,
     bonus: {},
     survivorEnabled: true,
+    survivorBlockTop: 3,  // survivor: block the top N clubs outright (0 = rule off)
     survivorRounds: [],   // [{ id, no, startGW }] admin-created, non-overlapping
     _v: 1,
   };
@@ -808,6 +809,11 @@ function f4Points(picks, livePts, cfg) {
   return sum * (cfg.f4Multiplier || 1);
 }
 function halfOf(gw) { return gw <= HALF_SPLIT ? 1 : 2; }
+// 3 -> "3rd". Used to describe the survivor top-N block in plain English.
+function ordinal(n) {
+  const num = Number(n) || 0, v = num % 100, s = ['th', 'st', 'nd', 'rd'];
+  return num + (s[(v - 20) % 10] || s[v] || s[0]);
+}
 
 // F4 availability predicate for dropdowns (per-player usage limits).
 function makeF4Availability(f4History) {
@@ -978,14 +984,32 @@ function survivorBottom3(allFixtures, teamsById, gw) {
   if (!table.some(r => r.played > 0)) return [];
   return table.slice(-3).map(r => r.short);
 }
-// map: blockedShort -> the bottom-3 opponent that blocks it
-function survivorBlocked(gwFixtures, bottom3) {
+// top-N shorts by the table AS OF gw-1. Same "no table yet => no restriction"
+// behaviour as the bottom-3 rule, so GW1 (and preseason) is a free-for-all.
+function survivorTopN(allFixtures, teamsById, gw, n) {
+  const count = Number(n) || 0;
+  if (count <= 0) return [];
+  const teams = Object.values(teamsById || {});
+  const table = buildLeagueTable(teams, allFixtures, gw - 1);
+  if (!table.some(r => r.played > 0)) return [];
+  return table.slice(0, count).map(r => r.short);
+}
+// Everything a pundit may NOT pick this gameweek:
+//   short -> { why:'top'|'bottom', label }
+// Note the two rules bite differently. The bottom-3 rule blocks the bottom
+// clubs' OPPONENTS (backing someone to beat the worst side is too easy). The
+// top-N rule blocks those clubs THEMSELVES — the point is to stop the same
+// title-chasers being backed week after week.
+function survivorBlocked(gwFixtures, bottom3, topN) {
   const blocked = {};
   (gwFixtures || []).forEach(f => {
-    const hB = bottom3.includes(f.teamH), aB = bottom3.includes(f.teamA);
-    if (hB && !aB) blocked[f.teamA] = f.teamH;
-    if (aB && !hB) blocked[f.teamH] = f.teamA;
+    const hB = (bottom3 || []).includes(f.teamH), aB = (bottom3 || []).includes(f.teamA);
+    if (hB && !aB) blocked[f.teamA] = { why: 'bottom', label: 'vs ' + f.teamH };
+    if (aB && !hB) blocked[f.teamH] = { why: 'bottom', label: 'vs ' + f.teamA };
   });
+  // Listed last so "you're top of the table" wins as the stated reason when a
+  // club is caught by both rules at once.
+  (topN || []).forEach((short, i) => { blocked[short] = { why: 'top', label: 'table #' + (i + 1) }; });
   return blocked;
 }
 // teams already used earlier this round: short -> gw
@@ -1107,6 +1131,7 @@ function App() {
     if (s.survivorEnabled === undefined) { s.survivorEnabled = true; save = true; }
     if (!Array.isArray(s.survivorRounds)) { s.survivorRounds = []; save = true; }
     if (s.scoring && s.scoring.survivorWinBonus === undefined) { s.scoring.survivorWinBonus = 1; save = true; }
+    if (s.survivorBlockTop === undefined) { s.survivorBlockTop = 3; save = true; }   // top-3 clubs off-limits in survivor
     if (!s.activeGW) { s.activeGW = 1; save = true; }
     if (!s.openGWs || !s.openGWs.length) { s.openGWs = [s.activeGW || 1]; save = true; }
     if (save && apiReady) await setShared("pp_state", s);
@@ -1645,6 +1670,7 @@ function HomeView({ state, user, myPred, standings, fpl, fplBusy, onRefresh, set
 // ============================================================
 function RulesView({ state }) {
   const sc = state.scoring || DEFAULT_SCORING;
+  const blockTop = (state.survivorBlockTop != null) ? Number(state.survivorBlockTop) : 3;
   return (
     <div>
       <div className="page-head">
@@ -1671,7 +1697,7 @@ function RulesView({ state }) {
         <div className="card">
           <div className="card-title">2 · Survivor</div>
           <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Each gameweek, pick one team to <strong style={{color:'var(--ink)'}}>win</strong>. Win → you advance; a draw, a loss or a missed deadline → you're out for the round. You score <strong>1 point for every week you survive</strong>, plus a winner bonus when a round settles.</p>
-          <p className="helper" style={{ marginTop:12 }}>Each team is usable once per round, and you can't pick the opponent of a bottom-3 club (Gameweek 1 excepted). Full survivor rules are in the card below.</p>
+          <p className="helper" style={{ marginTop:12 }}>Three things are off the board: any club in the <strong style={{color:'var(--yellow)'}}>top {blockTop}</strong> of the table, anyone <strong>playing a bottom-3</strong> club, and any club <strong>you've already used this round</strong> (Gameweek 1 exempt). Your options shrink every week you survive — that's the point. Full rules in the card below.</p>
           <div className="divider" style={{ margin:'20px 0' }}></div>
           <div className="card-title" style={{ fontSize:20 }}>3 · Fantastic Four</div>
           <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Pick a GK, defender, midfielder and forward. You score the <strong style={{color:'var(--ink)'}}>sum of their real FPL points</strong> that gameweek — bonuses included.</p>
@@ -1679,8 +1705,49 @@ function RulesView({ state }) {
         </div>
       </div>
       <div className="card" style={{ marginTop:18 }}>
-        <div className="card-title">Survivor</div>
-        <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Each gameweek, pick one team to <strong style={{color:'var(--ink)'}}>win</strong>. Win and you advance; a draw, a loss, or a missed deadline knocks you out for the round. Each team is usable <strong>only once per round</strong> — once you've used a club you can't pick it again (no penalty, the app simply won't allow it). You <strong>can't pick the opponent of a bottom-3 club</strong> (you can pick the bottom-3 club itself; if two bottom-3 sides meet, either is fair game); the one exception is <strong>Gameweek 1</strong>, when every team is available. <strong>Scoring:</strong> you earn <strong>1 point for every week you survive</strong>. A round runs until 3 or fewer pundits are left — the final survivors each get a <strong>bonus point</strong> (set by the admin) for winning, then the round resets and everyone re-enters with teams cleared. If everyone is knocked out in the same week, that week scores nothing but you keep every point banked earlier. The Survivor pot goes to whoever has the <strong>most points</strong> across the season.</p>
+        <div className="card-title">Survivor · full rules</div>
+        <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>
+          Each gameweek you back <strong style={{color:'var(--ink)'}}>one team to win</strong>. They win, you advance. A draw, a loss, or a missed deadline and you're out for the rest of the round.
+        </p>
+
+        <div style={{ fontFamily:'JetBrains Mono', fontSize:11, letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--ink-mute)', margin:'20px 0 10px' }}>Who you can't pick</div>
+        <div className="grid grid-3">
+          <div className="fixture" style={{ marginBottom:0, borderColor:'rgba(255,212,59,0.35)' }}>
+            <div style={{ fontFamily:'Anton', fontSize:16, letterSpacing:'0.03em', color:'var(--yellow)', marginBottom:8 }}>THE TOP {blockTop}</div>
+            <p style={{ color:'var(--ink-dim)', fontSize:13, lineHeight:1.6 }}>
+              Whoever sits <strong style={{color:'var(--ink)'}}>{blockTop === 1 ? "top of the table" : "1st to " + ordinal(blockTop)}</strong> is off the board. No riding the title race week after week. Their <em>opponents</em> are fair game — beating a front-runner is exactly the kind of call this game should reward.
+            </p>
+          </div>
+          <div className="fixture" style={{ marginBottom:0, borderColor:'rgba(233,0,82,0.3)' }}>
+            <div style={{ fontFamily:'Anton', fontSize:16, letterSpacing:'0.03em', color:'var(--accent)', marginBottom:8 }}>ANYONE PLAYING THE BOTTOM 3</div>
+            <p style={{ color:'var(--ink-dim)', fontSize:13, lineHeight:1.6 }}>
+              You can't back a club just because it's facing one of the worst three. You <strong style={{color:'var(--ink)'}}>can</strong> back a bottom-3 club itself, and if two bottom-3 sides meet, either is fine.
+            </p>
+          </div>
+          <div className="fixture" style={{ marginBottom:0, borderColor:'rgba(150,60,255,0.35)' }}>
+            <div style={{ fontFamily:'Anton', fontSize:16, letterSpacing:'0.03em', color:'var(--purple)', marginBottom:8 }}>ANYONE YOU'VE USED</div>
+            <p style={{ color:'var(--ink-dim)', fontSize:13, lineHeight:1.6 }}>
+              Each club is good for <strong style={{color:'var(--ink)'}}>one pick per round</strong>. No penalty — the app simply won't let you pick it again. Your list shrinks every week you survive.
+            </p>
+          </div>
+        </div>
+        <p className="helper" style={{ marginTop:12 }}>
+          Both table rules read the table <strong>as it stood after the previous gameweek</strong>, so everyone is working from the same picture. <strong>Gameweek 1 is exempt</strong> — before a ball is kicked there's no table, so all 20 clubs are available.
+        </p>
+        <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65, marginTop:12 }}>
+          Put together, that's the squeeze: the safe picks are banned, and the ones you've spent are gone for good. Surviving to week five means finding a winner from what's left — which is the whole point.
+        </p>
+
+        <div style={{ fontFamily:'JetBrains Mono', fontSize:11, letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--ink-mute)', margin:'22px 0 10px' }}>Scoring</div>
+        <ul className="rules-list">
+          <li><span className="rule-name">Every week you survive</span><span className="rule-points">1</span></li>
+          <li><span className="rule-name">Winning a round (final survivors)</span><span className="rule-points">{(sc.survivorWinBonus != null) ? sc.survivorWinBonus : 1}</span></li>
+        </ul>
+
+        <div style={{ fontFamily:'JetBrains Mono', fontSize:11, letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--ink-mute)', margin:'22px 0 10px' }}>How a round ends</div>
+        <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>
+          A round runs until <strong style={{color:'var(--ink)'}}>3 or fewer pundits are left</strong>. Those final survivors each take the winner bonus, then the round resets — everyone re-enters and every club is available again. If everybody falls in the same week, that week scores nothing, but you keep every point already banked. The Survivor pot goes to whoever has the <strong>most points across the season</strong>, not the most round wins — so surviving deep in a round you don't win still counts.
+        </p>
       </div>
       <div style={{ marginTop:18 }}>
         <div className="card">
@@ -2436,7 +2503,9 @@ function SurvivorTab({ state, myPred, fpl, survivorRounds, updateMyPred, showToa
   const allFx = allLoadedFixtures(fpl);
   const gwFx = (fpl.fixturesByGW && fpl.fixturesByGW[gw]) || [];
   const bottom3 = survivorBottom3(allFx, boot && boot.teams, gw);
-  const blocked = survivorBlocked(gwFx, bottom3);
+  const blockTop = (state.survivorBlockTop != null) ? Number(state.survivorBlockTop) : 3;
+  const topN = survivorTopN(allFx, boot && boot.teams, gw, blockTop);
+  const blocked = survivorBlocked(gwFx, bottom3, topN);
   const used = survivorUsed(myPred, active.startGW, gw);
   const fullName = (short) => { const t = boot && boot.teams && Object.values(boot.teams).find(x => x.short === short); return t ? t.name : short; };
 
@@ -2449,7 +2518,13 @@ function SurvivorTab({ state, myPred, fpl, survivorRounds, updateMyPred, showToa
 
   const choose = (short) => {
     if (locked) { showToast("Locked for this gameweek"); return; }
-    if (blocked[short]) { showToast(short + " is blocked — plays bottom-3 side " + blocked[short]); return; }
+    const b = blocked[short];
+    if (b) {
+      showToast(b.why === 'top'
+        ? short + " is blocked — currently " + b.label + " in the table"
+        : short + " is blocked — plays bottom-3 side " + b.label.replace(/^vs /, ""));
+      return;
+    }
     if (used[short] && myPick !== short) { showToast(short + " already used this round"); return; }
     updateMyPred(p => ({ ...p, survivor: { ...p.survivor, [gw]: short } }));
   };
@@ -2492,11 +2567,21 @@ function SurvivorTab({ state, myPred, fpl, survivorRounds, updateMyPred, showToa
   return (
     <div>
       {roundHead}
-      <p className="helper" style={{ marginBottom:12 }}>Pick one team to <strong>win</strong> GW{gw}. Win → you advance. Draw, loss or no pick → you're out. Each team is usable once per round. You can't pick the opponent of a bottom-3 side.</p>
-      {bottom3.length > 0 && (
-        <div className="card" style={{ marginBottom:14, padding:'12px 14px' }}>
-          <div style={{ fontFamily:'JetBrains Mono', fontSize:11, letterSpacing:'0.08em', color:'var(--ink-mute)', textTransform:'uppercase', marginBottom:6 }}>Bottom 3 this week</div>
-          <div style={{ fontSize:13 }}>{bottom3.join(", ")} — their opponents {Object.keys(blocked).length ? "(" + Object.keys(blocked).join(", ") + ") are blocked" : "are blocked"}.</div>
+      <p className="helper" style={{ marginBottom:12 }}>Pick one team to <strong>win</strong> GW{gw}. Win → you advance. Draw, loss or no pick → you're out. Each team is usable once per round.{topN.length ? <> The <strong>top {topN.length}</strong> can't be picked at all, and you can't pick the opponent of a bottom-3 side.</> : <> You can't pick the opponent of a bottom-3 side.</>}</p>
+      {(topN.length > 0 || bottom3.length > 0) && (
+        <div className="card" style={{ marginBottom:14, padding:'12px 14px', display:'grid', gap:10 }}>
+          {topN.length > 0 && (
+            <div>
+              <div style={{ fontFamily:'JetBrains Mono', fontSize:11, letterSpacing:'0.08em', color:'var(--ink-mute)', textTransform:'uppercase', marginBottom:6 }}>Top {topN.length} this week — off limits</div>
+              <div style={{ fontSize:13 }}>{topN.join(", ")} — you can't back the league's front-runners. Their opponents are fair game.</div>
+            </div>
+          )}
+          {bottom3.length > 0 && (
+            <div style={topN.length ? { borderTop:'1px solid var(--line)', paddingTop:10 } : null}>
+              <div style={{ fontFamily:'JetBrains Mono', fontSize:11, letterSpacing:'0.08em', color:'var(--ink-mute)', textTransform:'uppercase', marginBottom:6 }}>Bottom 3 this week</div>
+              <div style={{ fontSize:13 }}>{bottom3.join(", ")} — their opponents are blocked. You may back a bottom-3 club itself.</div>
+            </div>
+          )}
         </div>
       )}
       <div className="team-grid">
@@ -2509,7 +2594,9 @@ function SurvivorTab({ state, myPred, fpl, survivorRounds, updateMyPred, showToa
             <div key={t.short+t.ha} className={"team-chip" + (sel?" selected":"") + (disabled?" sv-disabled":"")} onClick={()=>choose(t.short)} title={fullName(t.short)}>
               <TeamBadge short={t.short} code={boot&&boot.teams&&boot.teams[t.id]?boot.teams[t.id].code:null} boot={boot} size={20} />
               <span style={{ marginLeft:6 }}>{t.short}</span>
-              <span className="uses">{isBlocked ? ("vs " + blocked[t.short]) : isUsed ? "used" : (t.ha + " v " + t.opp)}</span>
+              <span className="uses" style={isBlocked && blocked[t.short].why==='top' ? { color:'var(--yellow)' } : null}>
+                {isBlocked ? blocked[t.short].label : isUsed ? "used" : (t.ha + " v " + t.opp)}
+              </span>
             </div>
           );
         })}
@@ -3107,6 +3194,13 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
             <label className="helper" style={{ margin:0 }}>Winner bonus (points for winning a round)</label>
             <input type="number" value={(state.scoring && state.scoring.survivorWinBonus != null) ? state.scoring.survivorWinBonus : 1} onChange={e=>updateState(st => ({ ...st, scoring: { ...st.scoring, survivorWinBonus: Number(e.target.value)||0 } }))} style={{ width:70, background:'var(--bg-2)', border:'1px solid var(--line)', color:'var(--ink)', padding:'7px 10px', borderRadius:6 }} />
           </div>
+          <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:6, flexWrap:'wrap' }}>
+            <label className="helper" style={{ margin:0 }}>Block the top N clubs from being picked</label>
+            <input type="number" min="0" max="10" value={(state.survivorBlockTop != null) ? state.survivorBlockTop : 3} onChange={e=>updateState(st => ({ ...st, survivorBlockTop: Math.max(0, Math.min(10, Number(e.target.value)||0)) }))} style={{ width:70, background:'var(--bg-2)', border:'1px solid var(--line)', color:'var(--ink)', padding:'7px 10px', borderRadius:6 }} />
+          </div>
+          <p className="helper" style={{ marginTop:0, marginBottom:14 }}>
+            Set to <strong>3</strong> so nobody can keep backing the league's front-runners; combined with "each team once per round" that squeezes the options tighter every week. <strong>0</strong> turns the rule off. Read off the live table as of the previous gameweek, so Gameweek 1 (and any week before a ball is kicked) stays a free-for-all. Changing it only affects gameweeks that aren't locked yet.
+          </p>
           {survRounds.length === 0 ? <div className="empty-mini">No rounds started yet.</div> : (
             <table className="lb-table"><thead><tr><th>Round</th><th>From</th><th>Status</th><th>Alive / Winners</th><th></th></tr></thead>
             <tbody>
