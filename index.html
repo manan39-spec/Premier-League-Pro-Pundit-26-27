@@ -227,11 +227,14 @@
   .fx-daygroup { margin-top:20px; }
   .fx-dayhdr { font-family:'JetBrains Mono'; font-size:11px; letter-spacing:0.14em; color:var(--ink-mute); text-transform:uppercase; margin:0 0 10px; }
   .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.72); display:flex; align-items:flex-start; justify-content:center; padding:24px 16px; z-index:200; overflow:auto; }
-  .modal { background:var(--card); border:1px solid var(--line); border-radius:12px; width:100%; max-width:680px; box-shadow:0 24px 60px rgba(0,0,0,0.5); }
-  .modal-head { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); }
+  /* Never taller than the screen, and only the BODY scrolls — head and footer
+     stay put. Stops the old nested-scrollbar mess (overlay + body + page). */
+  .modal { background:var(--card); border:1px solid var(--line); border-radius:12px; width:100%; max-width:680px; box-shadow:0 24px 60px rgba(0,0,0,0.5);
+    display:flex; flex-direction:column; max-height:calc(100vh - 48px); max-height:calc(100dvh - 48px); }
+  .modal-head { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); flex:0 0 auto; }
   .modal-head h3 { margin:0; font-family:'Anton'; font-size:22px; letter-spacing:0.02em; }
-  .modal-body { padding:16px 20px; max-height:64vh; overflow:auto; }
-  .modal-foot { padding:14px 20px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:10px; }
+  .modal-body { padding:16px 20px; overflow:auto; -webkit-overflow-scrolling:touch; flex:1 1 auto; min-height:0; }
+  .modal-foot { padding:14px 20px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:10px; flex:0 0 auto; }
   .pk-controls { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
   .pk-controls .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .pk-input, .pk-select { width:100%; background:var(--bg-2); border:1px solid var(--line); color:var(--ink); padding:10px 12px; border-radius:6px; font-size:14px; }
@@ -717,7 +720,7 @@ async function fplAllFixtures(force) {
 // Cloud console. This one is *meant* to be public (Google's own button needs
 // it client-side) — it is an identifier, not a secret.
 const GOOGLE_CLIENT_ID = "901965344611-g2cc7mpeqf1fj8pismatrrd4oer6nr1i.apps.googleusercontent.com";
-const APP_VERSION = 20260208;   // bump on every deploy — clients on an older build get flushed automatically
+const APP_VERSION = 20260811;   // bump on every deploy — clients on an older build get flushed automatically
 const TOTAL_GW = 38;
 const HALF_SPLIT = 19; // GW1-19 first half, GW20-38 second half
 const POSITIONS = ["GK", "DEF", "MID", "FWD"];
@@ -1058,6 +1061,37 @@ function computeSurvivorStandings(users, state, fpl, now) {
 // ============================================================
 // MAIN APP
 // ============================================================
+// ============================================================
+// PORTAL — renders a modal at <body> level.
+//
+// Why this is needed: `.pitch-slot` sets `position:relative; z-index:2`, which
+// makes each Fantastic Four slot its own STACKING CONTEXT. A modal rendered
+// inside one of those slots has its z-index resolved *within* that slot, so the
+// later slots (same z-index, further down the DOM) painted straight over the
+// player picker. Raising the modal's z-index can't fix that — it has to escape
+// the stacking context entirely, which is what a portal does.
+//
+// It also locks background scrolling while open, so the page behind stops
+// moving under the modal.
+// ============================================================
+function Portal({ children }) {
+  const [host] = useState(() => {
+    const d = document.createElement('div');
+    d.className = 'pp-portal';
+    document.body.appendChild(d);
+    return d;
+  });
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+      try { document.body.removeChild(host); } catch {}
+    };
+  }, [host]);
+  return ReactDOM.createPortal(children, host);
+}
+
 function BottomNav({ view, predictTab, goPredict, survivorEnabled }) {
   const items = [["scores","🎯","Scores"],["survivor","💀","Survivor"],["f4","⭐","F4"],["bonus","❓","Bonus"]];
   return (
@@ -1426,7 +1460,7 @@ function App() {
         </footer>
       </div>
       <BottomNav view={view} predictTab={predictTab} goPredict={goPredict} survivorEnabled={state.survivorEnabled} />
-      {showAccount && <AccountModal user={user} onClose={()=>setShowAccount(false)} changeDisplayName={changeDisplayName} showToast={showToast} myPred={myPred} />}
+      {showAccount && <Portal><AccountModal user={user} onClose={()=>setShowAccount(false)} changeDisplayName={changeDisplayName} showToast={showToast} myPred={myPred} /></Portal>}
       {toast && <div className="toast">{toast}</div>}
     </>
   );
@@ -2371,8 +2405,10 @@ function F4Slot({ pos, gw, locked, current, players, teams, teamsById, byTeamPos
       )}
       {current && !locked && <button className="pitch-clear" onClick={onClear}>clear</button>}
       {open && !locked && (
-        <F4PickerModal pos={pos} gw={gw} current={current} players={players} teams={teams} teamsById={teamsById} isAvailable={isAvailable} fixtures={fixtures} boot={boot}
-          onClose={()=>setOpen(false)} onPick={(pid)=>{ onPick(pid); setOpen(false); }} />
+        <Portal>
+          <F4PickerModal pos={pos} gw={gw} current={current} players={players} teams={teams} teamsById={teamsById} isAvailable={isAvailable} fixtures={fixtures} boot={boot}
+            onClose={()=>setOpen(false)} onPick={(pid)=>{ onPick(pid); setOpen(false); }} />
+        </Portal>
       )}
     </div>
   );
@@ -2567,7 +2603,7 @@ function SurvivorTab({ state, myPred, fpl, survivorRounds, updateMyPred, showToa
   return (
     <div>
       {roundHead}
-      <p className="helper" style={{ marginBottom:12 }}>Pick one team to <strong>win</strong> GW{gw}. Win → you advance. Draw, loss or no pick → you're out. Each team is usable once per round.{topN.length ? <> The <strong>top {topN.length}</strong> can't be picked at all, and you can't pick the opponent of a bottom-3 side.</> : <> You cannot pick the opponent of a team in the bottom 3 of the league table or any club currently in the top 3 of the league table.</>}</p>
+      <p className="helper" style={{ marginBottom:12 }}>Pick one team to <strong>win</strong> GW{gw}. Win → you advance. Draw, loss or no pick → you're out. Each team is usable once per round.{topN.length ? <> The <strong>top {topN.length}</strong> can't be picked at all, and you can't pick the opponent of a bottom-3 side.</> : <> You can't pick the opponent of a bottom-3 side.</>}</p>
       {(topN.length > 0 || bottom3.length > 0) && (
         <div className="card" style={{ marginBottom:14, padding:'12px 14px', display:'grid', gap:10 }}>
           {topN.length > 0 && (
@@ -2886,7 +2922,7 @@ function LeaderboardView({ standings, currentUser, state, users, fpl, fplBusy, o
         const delta = (board!=="survivor" && mode==="overall" && prev.length && pr) ? (pr - (i+1)) : null;
         return <LeaderRow key={s2.name} s={s2} i={i} v={v} delta={delta} board={board} isYou={s2.name===currentUser} onClick={()=>setDetail(s2.name)} />;
       })}
-      {detailStanding && <PlayerDetailModal standing={detailStanding} onClose={()=>setDetail(null)} />}
+      {detailStanding && <Portal><PlayerDetailModal standing={detailStanding} onClose={()=>setDetail(null)} /></Portal>}
       <p className="helper" style={{ marginTop:14 }}>Tap any pundit for their gameweek-by-gameweek breakdown. Three prize pots — <strong>Scoreline</strong>, <strong>Fantastic Four</strong> and <strong>Survivor</strong> — plus the combined <strong>Overall</strong> summary (Score + F4 + Bonus).{board!=="survivor" && mode==="overall"?" Arrows show movement since last gameweek.":""}</p>
     </div>
   );
