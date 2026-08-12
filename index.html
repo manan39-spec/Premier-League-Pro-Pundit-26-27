@@ -50,14 +50,17 @@
   .bb-btn { flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:3px; padding:7px 3px; color:var(--ink-mute); font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:0.03em; text-transform:uppercase; border-radius:8px; transition:color 0.15s, background 0.15s; }
   .bb-btn .bb-ic { font-size:19px; line-height:1; }
   .bb-btn .bb-lbl { max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bb-btn .bb-full { display:none; }
+  @media (min-width:861px){ .bb-btn .bb-full { display:inline; } .bb-btn .bb-short { display:none; } }
   .bb-btn:hover { color:var(--ink); }
   .bb-btn.active { color:var(--accent); background:rgba(233,0,82,0.10); }
-  /* On a wide screen the main nav shows every section, so the bottom bar would
-     be pure duplication. It only earns its space on a phone, where the top nav
-     has to scroll and these four are what you tap every week. */
+  /* Shown at every width — this is the main way into the four weekly sections.
+     Roomier targets and full labels once there's space for them. */
   @media (min-width: 861px) {
-    .bottombar { display:none; }
-    .app { padding-bottom: 48px; }
+    .bottombar { padding:8px 10px; }
+    .bottombar-inner { max-width:760px; gap:6px; }
+    .bb-btn { flex-direction:row; gap:9px; padding:10px 6px; font-size:12px; letter-spacing:0.08em; }
+    .bb-btn .bb-ic { font-size:18px; }
   }
   .team-chip.sv-disabled { opacity:0.4; cursor:not-allowed; }
   .pk-exact { background:rgba(0,255,135,0.18); }
@@ -171,20 +174,27 @@
     overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; overscroll-behavior-x:contain; }
   .mainnav::-webkit-scrollbar { display:none; }
   .mainnav button { display:flex; align-items:center; gap:7px; font-family:'Anton', sans-serif; font-size:15px;
-    letter-spacing:0.04em; text-transform:uppercase; padding:13px 11px 14px; color:var(--ink-mute);
+    letter-spacing:0.04em; text-transform:uppercase; padding:13px 16px 14px; color:var(--ink-mute);
     border-bottom:3px solid transparent; white-space:nowrap; transition:color 0.15s, border-color 0.15s; }
   .mainnav .mn-ic { font-size:16px; line-height:1; filter:grayscale(0.55); transition:filter 0.15s; }
+  .mainnav .mn-short { display:none; }
   .mainnav button:hover { color:var(--ink); }
   .mainnav button:hover .mn-ic { filter:none; }
   .mainnav button.active { color:var(--ink); border-bottom-color:var(--accent); }
   .mainnav button.active .mn-ic { filter:none; }
-  .mainnav .mn-sep { flex:0 0 1px; align-self:center; height:22px; background:var(--line); margin:0 6px; }
   @media (max-width:900px){ .mainnav button { font-size:14px; padding:12px 12px 13px; gap:6px; } }
-  @media (max-width:640px){ .mainnav { margin-bottom:20px; } .mainnav button { font-size:13px; padding:11px 10px 12px; gap:5px; } .mainnav .mn-ic { font-size:15px; } }
-  @media (max-width:900px){
-    .mainnav { -webkit-mask-image:linear-gradient(to right,#000 0,#000 calc(100% - 26px),transparent 100%);
-               mask-image:linear-gradient(to right,#000 0,#000 calc(100% - 26px),transparent 100%); }
+  /* Phones: stack the icon over a short label and let the five share the width
+     evenly. Mirrors the bottom bar, so the two rows read as a matched pair —
+     four reference pages up top, four prediction sections below. */
+  @media (max-width:640px){
+    .mainnav { margin-bottom:18px; overflow-x:visible; }
+    .mainnav button { flex:1 1 0; min-width:0; flex-direction:column; justify-content:center;
+      gap:4px; padding:8px 4px 9px; font-size:10.5px; letter-spacing:0.03em; }
+    .mainnav .mn-ic { font-size:17px; }
+    .mainnav .mn-full { display:none; }
+    .mainnav .mn-short { display:inline; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
   }
+
 
   /* ---------------- deadline pill (next to the gameweek selector) ---------------- */
   .predict-bar { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:20px; }
@@ -192,20 +202,25 @@
   .pb-lbl { font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:0.12em; color:var(--ink-mute); text-transform:uppercase; }
   .pb-gw { font-family:'Anton', sans-serif; font-size:20px; letter-spacing:0.02em; }
   .pb-select { background:var(--bg-2); border:1px solid var(--line); color:var(--ink); padding:8px 12px; border-radius:6px; font-weight:600; }
-  .dl-pill { display:inline-flex; align-items:center; gap:10px; padding:8px 14px; border-radius:999px;
+  .dl-pill { display:inline-flex; align-items:center; gap:13px; padding:10px 18px; border-radius:999px;
     border:1px solid var(--line); background:var(--bg-2); white-space:nowrap; }
   .dl-k { font-family:'JetBrains Mono', monospace; font-size:9px; letter-spacing:0.16em; text-transform:uppercase; color:var(--ink-mute); }
-  .dl-when { font-size:13px; font-weight:600; color:var(--ink-dim); }
-  .dl-left { font-family:'JetBrains Mono', monospace; font-size:13px; font-weight:700; letter-spacing:0.02em; }
+  .dl-when { font-size:14px; font-weight:600; color:var(--ink-dim); }
+  .dl-w-short { display:none; }
+  .dl-left { font-family:'JetBrains Mono', monospace; font-size:15px; font-weight:700; letter-spacing:0.02em; }
   .dl-ok    { border-color:rgba(0,255,135,0.35); } .dl-ok .dl-left    { color:var(--accent-2); }
   .dl-soon  { border-color:rgba(255,212,59,0.45); } .dl-soon .dl-left  { color:var(--yellow); }
   .dl-close { border-color:rgba(233,0,82,0.55); background:rgba(233,0,82,0.08); } .dl-close .dl-left { color:var(--accent); }
   .dl-shut  { border-color:rgba(255,77,77,0.5); background:rgba(255,77,77,0.08); } .dl-shut .dl-left  { color:var(--red); }
-  @media (max-width:560px){
+  @media (max-width:620px){
     .predict-bar { gap:10px; }
-    .dl-pill { width:100%; justify-content:space-between; padding:9px 13px; }
-    .dl-when { font-size:12px; }
+    .dl-pill { width:100%; justify-content:space-between; padding:10px 13px; gap:8px; min-width:0; }
+    .dl-when { font-size:12.5px; }
+    .dl-left { font-size:13.5px; }
+    .dl-w-full { display:none; }
+    .dl-w-short { display:inline; }
   }
+  @media (max-width:380px){ .dl-k { display:none; } }
 
   .page-head { margin-bottom: 32px; }
   .eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent); letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 12px; }
@@ -742,7 +757,7 @@ async function fplBootstrap(force) {
     if (c && (Date.now() - c._t) < FPL_BOOT_TTL) return c.data;
   }
   try {
-    const r = await fetch(`${API_FPL}?resource=bootstrap`);
+    const r = await fetch(`${API_FPL}?resource=bootstrap`, CREDS);
     if (!r.ok) throw new Error('bootstrap ' + r.status);
     const data = await r.json();
     try { localStorage.setItem(cacheKey, JSON.stringify({ _t: Date.now(), data })); } catch {}
@@ -762,7 +777,7 @@ async function fplFixtures(gw, force) {
     if (allDone || (Date.now() - cached._t) < 60000) return cached.data;
   }
   try {
-    const r = await fetch(`${API_FPL}?resource=fixtures&gw=${gw}`);
+    const r = await fetch(`${API_FPL}?resource=fixtures&gw=${gw}`, CREDS);
     if (!r.ok) throw new Error('fixtures ' + r.status);
     const d = await r.json();
     const data = d.fixtures || [];
@@ -778,7 +793,7 @@ async function fplLive(gw, force) {
   const cached = parseStored(localStorage.getItem(cacheKey));
   if (!force && cached && (Date.now() - cached._t) < 60000) return cached.data;
   try {
-    const r = await fetch(`${API_FPL}?resource=live&gw=${gw}`);
+    const r = await fetch(`${API_FPL}?resource=live&gw=${gw}`, CREDS);
     if (!r.ok) throw new Error('live ' + r.status);
     const d = await r.json();
     const data = d.points || {};
@@ -795,7 +810,7 @@ async function fplAllFixtures(force) {
   const cached = parseStored(localStorage.getItem(cacheKey));
   if (!force && cached && (Date.now() - cached._t) < 30 * 60 * 1000) return cached.data;
   try {
-    const r = await fetch(`${API_FPL}?resource=fixtures`);
+    const r = await fetch(`${API_FPL}?resource=fixtures`, CREDS);
     if (!r.ok) throw new Error('allfx ' + r.status);
     const d = await r.json();
     const data = d.fixtures || [];
@@ -820,7 +835,7 @@ async function fplAllFixtures(force) {
 // Cloud console. This one is *meant* to be public (Google's own button needs
 // it client-side) — it is an identifier, not a secret.
 const GOOGLE_CLIENT_ID = "901965344611-g2cc7mpeqf1fj8pismatrrd4oer6nr1i.apps.googleusercontent.com";
-const APP_VERSION = 20260814;   // bump on every deploy — clients on an older build get flushed automatically
+const APP_VERSION = 20260816;   // bump on every deploy — clients on an older build get flushed automatically
 const TOTAL_GW = 38;
 const HALF_SPLIT = 19; // GW1-19 first half, GW20-38 second half
 const POSITIONS = ["GK", "DEF", "MID", "FWD"];
@@ -1210,33 +1225,34 @@ const NAV_ITEMS = [
 ];
 const PREDICT_VIEWS = NAV_ITEMS.filter(i => i.pred).map(i => i.id);
 
+// Top bar: everything that ISN'T a weekly prediction — reference pages and admin.
+// Four (five with Admin) up top, four down below, so the screen stays balanced.
 function MainNav({ view, setView, isAdmin }) {
-  const items = NAV_ITEMS.filter(i => !i.adminOnly || isAdmin);
+  const items = NAV_ITEMS.filter(i => !i.pred && (!i.adminOnly || isAdmin));
   return (
     <nav className="mainnav" aria-label="Main navigation">
-      {items.map((it, i) => (
-        <React.Fragment key={it.id}>
-          {/* a hairline between the weekly prediction sections and everything else */}
-          {i === PREDICT_VIEWS.length && <span className="mn-sep" aria-hidden="true" />}
-          <button className={view === it.id ? "active" : ""} onClick={() => setView(it.id)}
-            aria-current={view === it.id ? "page" : undefined}>
-            <span className="mn-ic" aria-hidden="true">{it.icon}</span>{it.label}
-          </button>
-        </React.Fragment>
+      {items.map(it => (
+        <button key={it.id} className={view === it.id ? "active" : ""} onClick={() => setView(it.id)}
+          aria-current={view === it.id ? "page" : undefined}>
+          <span className="mn-ic" aria-hidden="true">{it.icon}</span>
+          <span className="mn-full">{it.label}</span><span className="mn-short">{it.short}</span>
+        </button>
       ))}
     </nav>
   );
 }
 
-// Thumb shortcuts to the four weekly sections. Mobile only (see CSS) — on a
-// phone the top nav has to scroll, and these are the things you tap every week.
+// Bottom bar: the four things you actually do every gameweek. Shown on every
+// screen size now, not just phones — it's the primary way into the app.
 function BottomNav({ view, setView }) {
   return (
     <nav className="bottombar" aria-label="Prediction sections">
       <div className="bottombar-inner">
         {NAV_ITEMS.filter(i => i.pred).map(it => (
-          <button key={it.id} className={"bb-btn" + (view === it.id ? " active" : "")} onClick={() => setView(it.id)}>
-            <span className="bb-ic">{it.icon}</span><span className="bb-lbl">{it.short}</span>
+          <button key={it.id} className={"bb-btn" + (view === it.id ? " active" : "")} onClick={() => setView(it.id)}
+            aria-current={view === it.id ? "page" : undefined}>
+            <span className="bb-ic">{it.icon}</span>
+            <span className="bb-lbl bb-full">{it.label}</span><span className="bb-lbl bb-short">{it.short}</span>
           </button>
         ))}
       </div>
@@ -1269,10 +1285,12 @@ function DeadlinePill({ fpl, gw, state }) {
   const locked = gwLocked(state, fpl, gw, now);
   const diff = ms - now;
   const when = new Date(ms).toLocaleString(undefined, { weekday:'short', day:'numeric', month:'short', hour:'numeric', minute:'2-digit' });
+  const whenShort = new Date(ms).toLocaleString(undefined, { day:'numeric', month:'short', hour:'numeric', minute:'2-digit' });
+  const When = () => <span className="dl-when"><span className="dl-w-full">{when}</span><span className="dl-w-short">{whenShort}</span></span>;
   if (locked || diff <= 0) {
     return (
       <span className="dl-pill dl-shut" title={"Deadline was " + when}>
-        <span className="dl-k">Deadline</span><span className="dl-when">{when}</span><span className="dl-left">🔒 LOCKED</span>
+        <span className="dl-k">Deadline</span><When /><span className="dl-left">🔒 LOCKED</span>
       </span>
     );
   }
@@ -1283,7 +1301,7 @@ function DeadlinePill({ fpl, gw, state }) {
   const tone = diff < 3600000 ? "dl-close" : diff < 21600000 ? "dl-soon" : "dl-ok";
   return (
     <span className={"dl-pill " + tone} title={"FPL deadline: " + when}>
-      <span className="dl-k">Deadline</span><span className="dl-when">{when}</span><span className="dl-left">{left} left</span>
+      <span className="dl-k">Deadline</span><When /><span className="dl-left">{left} left</span>
     </span>
   );
 }
@@ -1880,7 +1898,6 @@ function HomeView({ state, user, myPred, standings, fpl, fplBusy, onRefresh, set
       <div className="page-head">
         <div className="eyebrow">GAMEWEEK {activeGW} · {locked ? "LOCKED" : "OPEN"}</div>
         <h1 className="page-title">PUT THE <span className="it">hats on.</span></h1>
-        <p className="page-sub">Predict five scorelines, back a winner, and build your Fantastic Four. Live points pulled straight from the official FPL data — bonuses included.</p>
       </div>
 
       <DeadlineCountdown deadlineMs={deadlineMs} label={nextEvent ? nextEvent.name.toUpperCase() : ""} />
@@ -1956,7 +1973,6 @@ function RulesView({ state }) {
       <div className="page-head">
         <div className="eyebrow">HOW IT WORKS</div>
         <h1 className="page-title">THE <span className="it">rules.</span></h1>
-        <p className="page-sub">Three sections every gameweek. Get your picks in before the FPL deadline — anything after doesn't count.</p>
       </div>
       <div className="grid grid-2">
         <div className="card">
@@ -2200,7 +2216,6 @@ function FixturesView({ state, fpl }) {
       <div className="page-head">
         <div className="eyebrow">FIXTURES & DIFFICULTY</div>
         <h1 className="page-title">Match <span className="it">week.</span></h1>
-        <p className="page-sub">The fixture difficulty run for every club (FDR), the matches week by week, or the live Premier League table.</p>
       </div>
       <div className="nav" style={{ marginBottom: 20 }}>
         <button className={mode==="fdr"?"active":""} onClick={()=>setMode("fdr")}>FDR</button>
@@ -2382,14 +2397,10 @@ function playersByTeamPos(players) {
 // Per-section page copy, so each of the four prediction sections reads like its
 // own page rather than a tab inside a generic "Predict" screen.
 const SECTION_META = {
-  scores:   { eyebrow:"SCORE PREDICTIONS", word:"scores.",
-              sub:"Predict the scoreline for each selected fixture. Saves as you type." },
-  survivor: { eyebrow:"SURVIVOR", word:"survivor.",
-              sub:"Back one team to win. Win and you go through; a draw or a loss and you're out for the round." },
-  f4:       { eyebrow:"FANTASTIC FOUR", word:"fab four.",
-              sub:"Pick a keeper, a defender, a midfielder and a forward. You score their real FPL points." },
-  bonus:    { eyebrow:"BONUS QUESTIONS", word:"bonus.",
-              sub:"Answer before the deadline. Points land once the admin settles the correct answer." },
+  scores:   { lead:"SCORE",     word:"predictions." },
+  survivor: { lead:"THE",       word:"survivor." },
+  f4:       { lead:"FANTASTIC", word:"four." },
+  bonus:    { lead:"BONUS",     word:"questions." },
 };
 
 function PredictView({ state, myPred, users, fpl, updateMyPred, showToast, tab, survivorRounds, saveState }) {
@@ -2406,28 +2417,26 @@ function PredictView({ state, myPred, users, fpl, updateMyPred, showToast, tab, 
 
   return (
     <div>
-      <div className="page-head">
-        <div className="eyebrow">{meta.eyebrow} · GAMEWEEK {gw} · {locked ? "🔒 LOCKED" : "OPEN"}</div>
-        <h1 className="page-title">GW{gw} <span className="it">{meta.word}</span></h1>
-        <p className="page-sub">{locked ? "This gameweek is locked — showing your picks and how they scored." : meta.sub}</p>
-      </div>
-
-      {!boot && <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>⚠️ Couldn't load FPL data (teams/players/fixtures). It works once deployed on Vercel; if you're seeing this live, hit Refresh on the Home &amp; Rules page.</div>}
-
-      {/* Gameweek selector and that gameweek's live deadline, side by side and
-          always on screen — the deadline updates when you change the week. */}
+      {/* Gameweek picker and that week's live deadline sit ABOVE the heading —
+          you choose the week first, then see which section you're filling in. */}
       <div className="card predict-bar">
         <div className="pb-left">
-          <span className="pb-lbl">Predicting for</span>
+          <span className="pb-lbl">Gameweek</span>
           {selectable.length > 1
             ? <select className="pb-select" value={gw} onChange={e=>setGw(parseInt(e.target.value,10))} aria-label="Choose gameweek">
                 {selectable.map(g => <option key={g} value={g}>Gameweek {g}{gwLocked(state, fpl, g) ? " — locked" : ""}{g===(state.activeGW||1) ? " · current" : ""}</option>)}
               </select>
             : <span className="pb-gw">Gameweek {gw}</span>}
-          {selectable.length > 1 && <span className="helper" style={{ margin:0 }}>{selectable.length} weeks open — submit ahead if you like.</span>}
         </div>
         <DeadlinePill fpl={fpl} gw={gw} state={state} />
       </div>
+
+      <div className="page-head">
+        <div className="eyebrow">GAMEWEEK {gw} · {locked ? "🔒 LOCKED" : "OPEN"}</div>
+        <h1 className="page-title">{meta.lead} <span className="it">{meta.word}</span></h1>
+      </div>
+
+      {!boot && <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>⚠️ Couldn't load FPL data (teams/players/fixtures). It works once deployed on Vercel; if you're seeing this live, hit Refresh on the Home page.</div>}
 
       {tab==="scores" && <ScoresTab state={state} gw={gw} locked={locked} fixtures={fixtures} boot={boot} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} saveState={saveState} />}
       {tab==="f4" && <F4Tab state={state} gw={gw} locked={locked} live={live} boot={boot} fixtures={fixtures} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
@@ -3092,7 +3101,6 @@ function PicksView({ state, users, currentUser, fpl }) {
       <div className="page-head">
         <div className="eyebrow">EVERYONE'S PICKS · LOCKED</div>
         <h1 className="page-title">THE <span className="it">picks.</span></h1>
-        <p className="page-sub">All predictions for locked gameweeks, with results — green = right, red = wrong.</p>
       </div>
       <div className="field" style={{ maxWidth:220 }}>
         <label>Gameweek</label>
@@ -3523,7 +3531,7 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
       <div className="page-head">
         <div className="eyebrow">CONTROL ROOM</div>
         <h1 className="page-title">ADMIN <span className="it">deck.</span></h1>
-        <p className="page-sub" style={{ fontSize:14 }}>Signed in as <strong style={{ color:'var(--ink)' }}>{adminEmail || "an approved admin account"}</strong> — verified by Google on the server. Only accounts on the server's admin list can see or use this page.</p>
+        <p className="page-sub" style={{ fontSize:13, marginTop:8 }}>Signed in as <strong style={{ color:'var(--ink)' }}>{adminEmail || "an approved admin account"}</strong></p>
       </div>
 
       <div className="grid grid-2">
