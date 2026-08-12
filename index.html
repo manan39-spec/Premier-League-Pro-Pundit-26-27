@@ -122,10 +122,20 @@
       radial-gradient(1200px 600px at 90% -10%, rgba(233,0,82,0.10), transparent 60%),
       radial-gradient(900px 500px at -10% 110%, rgba(0,255,135,0.06), transparent 60%),
       radial-gradient(700px 400px at 50% 50%, rgba(150,60,255,0.05), transparent 70%);
-    background-attachment: fixed;
+    /* `fixed` forces the browser to repaint these gradients on every scroll
+       frame — the single biggest cause of scroll jank on phones. Desktop can
+       afford it; touch devices get a static background instead. */
+    background-attachment: scroll;
   }
+  @media (hover: hover) and (min-width: 900px) {
+    body { background-attachment: fixed; }
+  }
+  /* Kills the ~300ms delay mobile browsers add before firing a tap. */
+  button, .team-chip, .qn-btn, .lb-row, .bb-btn, .fdr-th-team { touch-action: manipulation; }
   button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
   input, select { font-family: inherit; }
+  /* Scrolling a table or modal list shouldn't drag the page behind it. */
+  .fdr-wrap, .modal-body, .nav, .lb-table, .pl-table { overscroll-behavior: contain; }
   a { color: var(--accent-2); }
 
   .app { max-width: 1280px; margin: 0 auto; padding: 0 24px calc(88px + env(safe-area-inset-bottom)); }
@@ -293,6 +303,9 @@
   .cd-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--ink-mute); letter-spacing: 0.18em; margin-top: 4px; }
   .cd-sep { font-family: 'Anton', sans-serif; font-size: clamp(34px, 5vw, 52px); color: var(--accent); align-self: flex-start; line-height: 0.9; margin-top: 4px; animation: blink 1.2s infinite; }
   @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.25;} }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
+  }
   .countdown-row.live { background: linear-gradient(135deg, rgba(0,255,135,0.10), rgba(0,255,135,0.02)); border-color: rgba(0,255,135,0.35); }
   .countdown-row.live .countdown-label { color: var(--green); }
 
@@ -449,12 +462,14 @@
   .pl-club { display:flex; align-items:center; gap:9px; }
   .pl-nm { font-family:'Inter Tight', sans-serif; font-weight:600; font-size:14px; color:var(--ink); }
   .pl-table td.pl-pts { color:var(--ink); font-weight:700; font-family:'Anton', sans-serif; font-size:17px; }
-  .pl-row.ucl td.pl-pos { box-shadow: inset 3px 0 0 var(--accent-2); }
+  /* Yellow = top-N (blocked outright in Survivor), matching the yellow "table #N"
+     labels on the Survivor pick screen. Red = bottom 3. */
+  .pl-row.svtop td.pl-pos { box-shadow: inset 3px 0 0 var(--yellow); }
   .pl-row.rel td.pl-pos { box-shadow: inset 3px 0 0 var(--red); }
   .pl-key { display:flex; gap:16px; flex-wrap:wrap; font-family:'JetBrains Mono', monospace; font-size:11px; color:var(--ink-mute); }
   .pl-key-item { display:flex; align-items:center; gap:6px; }
   .pl-dot { width:10px; height:10px; border-radius:2px; display:inline-block; }
-  .pl-dot.ucl { background:var(--accent-2); }
+  .pl-dot.svtop { background:var(--yellow); }
   .pl-dot.rel { background:var(--red); }
   @media (max-width:560px){ .pl-hide { display:none; } .pl-table { min-width:360px; } }
 </style>
@@ -720,7 +735,7 @@ async function fplAllFixtures(force) {
 // Cloud console. This one is *meant* to be public (Google's own button needs
 // it client-side) — it is an identifier, not a secret.
 const GOOGLE_CLIENT_ID = "901965344611-g2cc7mpeqf1fj8pismatrrd4oer6nr1i.apps.googleusercontent.com";
-const APP_VERSION = 20260811;   // bump on every deploy — clients on an older build get flushed automatically
+const APP_VERSION = 20260812;   // bump on every deploy — clients on an older build get flushed automatically
 const TOTAL_GW = 38;
 const HALF_SPLIT = 19; // GW1-19 first half, GW20-38 second half
 const POSITIONS = ["GK", "DEF", "MID", "FWD"];
@@ -1239,6 +1254,7 @@ function App() {
   useEffect(() => {
     if (!remoteAvailable || !user) return;
     const id = setInterval(async () => {
+      if (document.visibilityState === 'hidden') return;
       const who = await fetchSession();
       setSession(who);
       if (!who.ok) { setUser(null); try { localStorage.removeItem("current_user"); } catch {} }
@@ -1250,15 +1266,21 @@ function App() {
   // while signed out would just be a stream of 401s.
   useEffect(() => {
     if (!remoteAvailable || !user) return;
-    const id = setInterval(async () => {
+    // Polling a hidden tab wastes battery and data, and the queued-up work all
+    // lands at once when you come back — which is exactly when it's felt.
+    const pull = async () => {
+      if (document.visibilityState === 'hidden') return;
       if (await checkEpoch()) return;
       const s = await refreshState();
       const active = (s || stateRef.current || {}).activeGW || 1;
       const fx = await fplFixtures(active, true);
       const lv = await fplLive(active, true);
       setFpl(prev => ({ ...prev, fixturesByGW: { ...prev.fixturesByGW, [active]: fx }, liveByGW: { ...prev.liveByGW, [active]: lv } }));
-    }, SYNC_POLL_MS);
-    return () => clearInterval(id);
+    };
+    const id = setInterval(pull, SYNC_POLL_MS);
+    const onVis = () => { if (document.visibilityState === 'visible') pull(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVis); };
   }, [remoteAvailable, refreshState, user]);
 
   // App-version beacon: advertise the newest build, and flush stale ones.
@@ -1286,7 +1308,8 @@ function App() {
       } catch {}
     };
     check();
-    const id = setInterval(check, SYNC_POLL_MS);
+    // Deploys are rare — no need to ask every 30 seconds.
+    const id = setInterval(() => { if (document.visibilityState !== 'hidden') check(); }, SYNC_POLL_MS * 6);
     return () => { stop = true; clearInterval(id); };
   }, [remoteAvailable, user]);
 
@@ -1313,15 +1336,50 @@ function App() {
 
   const myPred = useMemo(() => (!user || !users) ? null : users.find(u => u.name === user), [user, users]);
 
+  // Every pick used to cost a network GET *and* a POST before the screen
+  // updated, which is why entering scorelines felt laggy — the input couldn't
+  // repaint until two round-trips finished. Now the local state updates first
+  // and the write happens behind it.
+  //
+  // myPredRef holds the authoritative in-memory copy so rapid successive edits
+  // chain off each other instead of racing. The one remote read only happens on
+  // the first edit of a session, when we have nothing local to build on (which
+  // also protects against writing a blank record over real picks).
+  const myPredRef = useRef(null);
+  const savingRef = useRef(0);
+  const [saveState, setSaveState] = useState("idle");   // idle | saving | saved | error
+
   const updateMyPred = useCallback(async (mutator) => {
     if (!user) return;
-    let p = await getShared("pp_pred:" + user);
-    if (!p) p = { name: user, joined: Date.now(), scores: {}, teamPick: {}, f4: {}, survivor: {}, bonusAnswers: {} };
-    const updated = mutator({ ...p });
+    let base = myPredRef.current;
+    if (!base || base.name !== user) {
+      base = await getShared("pp_pred:" + user);
+      if (!base) base = { name: user, joined: Date.now(), scores: {}, teamPick: {}, f4: {}, survivor: {}, bonusAnswers: {} };
+    }
+    const updated = mutator({ ...base });
     updated.lastEdited = Date.now();
-    await setShared("pp_pred:" + user, updated);
+
+    // --- optimistic: UI reflects the pick immediately ---
+    myPredRef.current = updated;
     setUsers(prev => prev.some(u => u.name === user) ? prev.map(u => u.name === user ? updated : u) : [...prev, updated]);
+
+    // --- then persist, tracking in-flight writes so the status is accurate ---
+    savingRef.current++;
+    setSaveState("saving");
+    try { localStorage.setItem("pp_pred:" + user, JSON.stringify(updated)); } catch {}
+    let ok = true;
+    if (apiReady) {
+      ok = await remoteSet("pp_pred:" + user, updated);
+      if (!ok) ok = await remoteSet("pp_pred:" + user, updated);   // one quiet retry
+    }
+    savingRef.current--;
+    if (savingRef.current === 0) setSaveState(ok ? "saved" : "error");
+    else if (!ok) setSaveState("error");
   }, [user]);
+  // Reset first, then re-seed — so switching accounts can't leave one pundit's
+  // record cached as the base for another's edits.
+  useEffect(() => { myPredRef.current = null; setSaveState("idle"); }, [user]);
+  useEffect(() => { if (myPred && !myPredRef.current) myPredRef.current = myPred; }, [myPred]);
 
   // server-verified admin writes (never overwrite newer data / never blank)
   const updateState = useCallback(async (mutator) => {
@@ -1447,7 +1505,7 @@ function App() {
         </nav>
 
         {view==="home" && <HomeView state={state} user={user} myPred={myPred} standings={standings} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} setView={setView} goPredict={goPredict} survivorPts={survivorPts} />}
-        {view==="predict" && <PredictView state={state} myPred={myPred} users={users} fpl={fpl} updateMyPred={updateMyPred} showToast={showToast} tab={predictTab} setTab={setPredictTab} survivorRounds={survivorRounds} />}
+        {view==="predict" && <PredictView state={state} myPred={myPred} users={users} fpl={fpl} updateMyPred={updateMyPred} showToast={showToast} tab={predictTab} setTab={setPredictTab} survivorRounds={survivorRounds} saveState={saveState} />}
         {view==="fixtures" && <FixturesView state={state} fpl={fpl} />}
         {view==="picks" && <PicksView state={state} users={users} currentUser={user} fpl={fpl} />}
         {view==="leaderboard" && <LeaderboardView standings={standings} currentUser={user} state={state} users={users} fpl={fpl} fplBusy={fplBusy} onRefresh={()=>refreshAll(true)} survivorPts={survivorPts} survivorWins={survivorWins} />}
@@ -1604,10 +1662,51 @@ function LoginView({ onLogin, remoteAvailable }) {
   );
 }
 
-function HomeView({ state, user, myPred, standings, fpl, fplBusy, onRefresh, setView, goPredict, survivorPts }) {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
+// Isolated so the once-a-second tick only re-renders the clock. Previously the
+// whole Home page (stat row, mini leaderboard, breakdown) re-rendered every
+// second, which is a lot of wasted work on a phone.
+function DeadlineCountdown({ deadlineMs, label }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!deadlineMs) return;
+    // Pause while the tab is hidden — no point animating a clock nobody sees.
+    let id = null;
+    const tick = () => setNow(Date.now());
+    const start = () => { if (id == null) { tick(); id = setInterval(tick, 1000); } };
+    const stop = () => { if (id != null) { clearInterval(id); id = null; } };
+    const onVis = () => (document.visibilityState === 'hidden' ? stop() : start());
+    start();
+    document.addEventListener('visibilitychange', onVis);
+    return () => { stop(); document.removeEventListener('visibilitychange', onVis); };
+  }, [deadlineMs]);
+  if (!deadlineMs) return null;
+  const diff = Math.max(0, deadlineMs - now);
+  const days = Math.floor(diff/86400000), hrs = Math.floor((diff%86400000)/3600000),
+        mins = Math.floor((diff%3600000)/60000), secs = Math.floor((diff%60000)/1000);
+  const pad = n => String(n).padStart(2,'0');
+  const passed = diff === 0;
+  return (
+    <div className={"countdown-row" + (passed ? " live" : "")}>
+      <div>
+        <div className="countdown-label">{passed ? "🔴 DEADLINE PASSED" : `FPL DEADLINE · ${label || ""}`}</div>
+        <div className="countdown-where">{new Date(deadlineMs).toLocaleString(undefined, { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })}</div>
+        <div style={{ marginTop:10, fontFamily:'JetBrains Mono', fontSize:11, letterSpacing:'0.08em', textTransform:'uppercase', color: passed?'var(--red)':'var(--accent-2)' }}>
+          {passed ? "Picks after the deadline don't count" : "Get your picks in before this"}
+        </div>
+      </div>
+      {!passed && (
+        <div className="countdown-numbers">
+          {days>0 && <><div className="cd-unit"><div className="cd-val">{pad(days)}</div><div className="cd-label">DAYS</div></div><div className="cd-sep">:</div></>}
+          <div className="cd-unit"><div className="cd-val">{pad(hrs)}</div><div className="cd-label">HRS</div></div><div className="cd-sep">:</div>
+          <div className="cd-unit"><div className="cd-val">{pad(mins)}</div><div className="cd-label">MIN</div></div><div className="cd-sep">:</div>
+          <div className="cd-unit"><div className="cd-val">{pad(secs)}</div><div className="cd-label">SEC</div></div>
+        </div>
+      )}
+    </div>
+  );
+}
 
+function HomeView({ state, user, myPred, standings, fpl, fplBusy, onRefresh, setView, goPredict, survivorPts }) {
   const myRow = standings.find(s => s.name === user);
   const myRank = standings.findIndex(s => s.name === user) + 1;
   const leader = standings[0];
@@ -1618,10 +1717,6 @@ function HomeView({ state, user, myPred, standings, fpl, fplBusy, onRefresh, set
   const events = (fpl.boot && fpl.boot.events) || [];
   const nextEvent = events.find(e => e.isNext) || events.find(e => e.isCurrent) || null;
   const deadlineMs = nextEvent ? new Date(nextEvent.deadline).getTime() : 0;
-  const diff = Math.max(0, deadlineMs - now);
-  const days = Math.floor(diff/86400000), hrs = Math.floor((diff%86400000)/3600000), mins = Math.floor((diff%3600000)/60000), secs = Math.floor((diff%60000)/1000);
-  const pad = n => String(n).padStart(2,'0');
-  const passed = deadlineMs && diff === 0;
 
   return (
     <div>
@@ -1631,25 +1726,7 @@ function HomeView({ state, user, myPred, standings, fpl, fplBusy, onRefresh, set
         <p className="page-sub">Predict five scorelines, back a winner, and build your Fantastic Four. Live points pulled straight from the official FPL data — bonuses included.</p>
       </div>
 
-      {deadlineMs ? (
-        <div className={"countdown-row" + (passed ? " live" : "")}>
-          <div>
-            <div className="countdown-label">{passed ? "🔴 DEADLINE PASSED" : `FPL DEADLINE · ${nextEvent ? nextEvent.name.toUpperCase() : ""}`}</div>
-            <div className="countdown-where">{new Date(deadlineMs).toLocaleString(undefined, { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })}</div>
-            <div style={{ marginTop:10, fontFamily:'JetBrains Mono', fontSize:11, letterSpacing:'0.08em', textTransform:'uppercase', color: passed?'var(--red)':'var(--accent-2)' }}>
-              {passed ? "Picks after the deadline don't count" : "Get your picks in before this"}
-            </div>
-          </div>
-          {!passed && (
-            <div className="countdown-numbers">
-              {days>0 && <><div className="cd-unit"><div className="cd-val">{pad(days)}</div><div className="cd-label">DAYS</div></div><div className="cd-sep">:</div></>}
-              <div className="cd-unit"><div className="cd-val">{pad(hrs)}</div><div className="cd-label">HRS</div></div><div className="cd-sep">:</div>
-              <div className="cd-unit"><div className="cd-val">{pad(mins)}</div><div className="cd-label">MIN</div></div><div className="cd-sep">:</div>
-              <div className="cd-unit"><div className="cd-val">{pad(secs)}</div><div className="cd-label">SEC</div></div>
-            </div>
-          )}
-        </div>
-      ) : null}
+      <DeadlineCountdown deadlineMs={deadlineMs} label={nextEvent ? nextEvent.name.toUpperCase() : ""} />
 
       <div className="stat-row">
         <div className="stat"><div className="stat-label">Your Points</div><div className="stat-value accent">{myRow ? myRow.total : 0}</div><div className="stat-sub">Rank #{myRank>0?myRank:"—"} of {standings.length}</div></div>
@@ -1905,6 +1982,7 @@ function buildLeagueTable(teams, allFixtures, uptoGW) {
 
 function PLTable({ state, fpl }) {
   const boot = fpl.boot;
+  const blockTop = (state && state.survivorBlockTop != null) ? Number(state.survivorBlockTop) : 3;
   const [all, setAll] = useState(null);
   useEffect(() => { let alive=true; fplAllFixtures().then(fx => { if (alive) setAll(fx||[]); }).catch(()=>{ if(alive) setAll([]); }); return ()=>{alive=false;}; }, []);
   if (!boot || !boot.teams) return <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>⚠️ Couldn't load FPL data. The table works once deployed on Vercel; if you're live, hit Refresh on the Home tab.</div>;
@@ -1920,7 +1998,7 @@ function PLTable({ state, fpl }) {
             <thead><tr><th className="pl-pos">#</th><th className="pl-club">Club</th><th>P</th><th>W</th><th>D</th><th>L</th><th className="pl-hide">GF</th><th className="pl-hide">GA</th><th>GD</th><th className="pl-pts">Pts</th></tr></thead>
             <tbody>
               {rows.map(r => {
-                const zone = r.position <= 4 ? "ucl" : r.position >= 18 ? "rel" : "";
+                const zone = r.position <= blockTop ? "svtop" : r.position >= 18 ? "rel" : "";
                 return (
                   <tr key={r.short} className={"pl-row " + zone}>
                     <td className="pl-pos">{r.position}</td>
@@ -1936,8 +2014,10 @@ function PLTable({ state, fpl }) {
         </div>
       </div>
       {!anyPlayed && <p className="helper" style={{ marginTop:12 }}>No results yet — the table fills in as matches are played.</p>}
+      {/* The two zones marked here are exactly the two Survivor restrictions, so
+          the table doubles as a "who can I pick this week" reference. */}
       <div className="pl-key" style={{ marginTop:12 }}>
-        <span className="pl-key-item"><span className="pl-dot ucl"></span>Top 4</span>
+        {blockTop > 0 && <span className="pl-key-item"><span className="pl-dot svtop"></span>Top {blockTop} — can't be picked in Survivor</span>}
         <span className="pl-key-item"><span className="pl-dot rel"></span>Bottom 3 — their opponents are blocked in Survivor</span>
       </div>
     </div>
@@ -2130,13 +2210,11 @@ function playersByTeamPos(players) {
   return out;
 }
 
-function PredictView({ state, myPred, users, fpl, updateMyPred, showToast, tab, setTab, survivorRounds }) {
+function PredictView({ state, myPred, users, fpl, updateMyPred, showToast, tab, setTab, survivorRounds, saveState }) {
   const openGWs = (state.openGWs && state.openGWs.length) ? state.openGWs.slice() : [state.activeGW || 1];
   const selectable = Array.from(new Set([...openGWs, state.activeGW || 1])).sort((a, b) => a - b);
   const [gw, setGw] = useState(state.activeGW || 1);
   useEffect(() => { if (!selectable.includes(gw)) setGw(state.activeGW || 1); }, [selectable.join(","), state.activeGW]);
-  const [scoreDraft, setScoreDraft] = useState(() => (myPred && myPred.scores && myPred.scores[state.activeGW || 1]) || {});
-  useEffect(() => { setScoreDraft((myPred && myPred.scores && myPred.scores[gw]) || {}); }, [gw]);
   const locked = gwLocked(state, fpl, gw);
   const fixtures = (fpl.fixturesByGW && fpl.fixturesByGW[gw]) || [];
   const live = (fpl.liveByGW && fpl.liveByGW[gw]) || {};
@@ -2170,7 +2248,7 @@ function PredictView({ state, myPred, users, fpl, updateMyPred, showToast, tab, 
         <button className={tab==="bonus"?"active":""} onClick={()=>setTab("bonus")}>Bonus</button>
       </div>
 
-      {tab==="scores" && <ScoresTab state={state} gw={gw} locked={locked} fixtures={fixtures} boot={boot} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} scoreDraft={scoreDraft} setScoreDraft={setScoreDraft} />}
+      {tab==="scores" && <ScoresTab state={state} gw={gw} locked={locked} fixtures={fixtures} boot={boot} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} saveState={saveState} />}
       {tab==="f4" && <F4Tab state={state} gw={gw} locked={locked} live={live} boot={boot} fixtures={fixtures} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
       {tab==="survivor" && <SurvivorTab state={state} myPred={myPred} fpl={fpl} survivorRounds={survivorRounds} updateMyPred={updateMyPred} showToast={showToast} />}
       {tab==="bonus" && <BonusTab state={state} gw={gw} locked={locked} myPred={myPred} fpl={fpl} updateMyPred={updateMyPred} showToast={showToast} />}
@@ -2178,23 +2256,72 @@ function PredictView({ state, myPred, users, fpl, updateMyPred, showToast, tab, 
   );
 }
 
-function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, showToast }) {
+function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, showToast, saveState }) {
   const sc = state.scoring || DEFAULT_SCORING;
   const selIds = (state.selectedFixtures && state.selectedFixtures[gw]) || [];
   const selected = selIds.map(id => fixtures.find(f => String(f.id) === String(id))).filter(Boolean);
-  const preds = (myPred.scores && myPred.scores[gw]) || {};
+  const saved = (myPred.scores && myPred.scores[gw]) || {};
   const fullName = (short, id) => (boot && boot.teams && boot.teams[id]) ? boot.teams[id].name : short;
 
-  // Auto-save on every keystroke (PANENKA-style — no save button).
+  // The inputs render from a LOCAL draft, so a keystroke paints on the next
+  // frame instead of waiting for the server. Writes are then debounced, so
+  // typing "3-1" across four fixtures is a couple of saves rather than eight.
+  const [draft, setDraft] = useState(saved);
+  const flushRef = useRef(null);
+  const pendingRef = useRef(null);
+  // Re-sync when the gameweek changes, or when a save lands and there's nothing
+  // queued locally (so another device's edits still show up).
+  useEffect(() => { setDraft((myPred.scores && myPred.scores[gw]) || {}); pendingRef.current = null; }, [gw]);
+  useEffect(() => {
+    if (pendingRef.current) return;               // don't stomp on what's being typed
+    setDraft((myPred.scores && myPred.scores[gw]) || {});
+  }, [myPred, gw]);
+
+  const flush = useCallback(() => {
+    const pending = pendingRef.current;
+    if (!pending) return;
+    pendingRef.current = null;
+    updateMyPred(p => ({ ...p, scores: { ...p.scores, [gw]: pending } }));
+  }, [updateMyPred, gw]);
+
+  // Never lose a pick: flush on unmount, on tab/app backgrounding, and on close.
+  useEffect(() => {
+    const onHide = () => { if (document.visibilityState === 'hidden') flush(); };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', flush);
+      if (flushRef.current) clearTimeout(flushRef.current);
+      flush();
+    };
+  }, [flush]);
+
   const setHalf = (fid, which, val) => {
     if (locked) { showToast("Gameweek locked"); return; }
     const v = val.replace(/[^0-9]/g, "").slice(0,2);
-    const cur = (preds[fid] || "").split("-");
+    const cur = (draft[fid] || "").split("-");
     const next = which === 0 ? `${v}-${cur[1]||""}` : `${cur[0]||""}-${v}`;
-    updateMyPred(p => ({ ...p, scores: { ...p.scores, [gw]: { ...(p.scores && p.scores[gw]), [fid]: next } } }));
+    const updated = { ...draft, [fid]: next };
+    setDraft(updated);                            // instant
+    pendingRef.current = updated;
+    if (flushRef.current) clearTimeout(flushRef.current);
+    flushRef.current = setTimeout(flush, 600);    // save shortly after you stop typing
   };
-  const clearAll = () => { if (locked) { showToast("Gameweek locked"); return; } updateMyPred(p => ({ ...p, scores: { ...p.scores, [gw]: {} } })); showToast("All scores cleared"); };
+  const clearAll = () => {
+    if (locked) { showToast("Gameweek locked"); return; }
+    if (flushRef.current) clearTimeout(flushRef.current);
+    pendingRef.current = null;
+    setDraft({});
+    updateMyPred(p => ({ ...p, scores: { ...p.scores, [gw]: {} } }));
+    showToast("All scores cleared");
+  };
+  const preds = draft;
   const hasAny = selected.some(f => (preds[f.id] || "").replace("-","").trim() !== "");
+  const statusText = saveState === "saving" ? "Saving…"
+    : saveState === "error" ? "⚠️ Not saved — check your connection"
+    : saveState === "saved" ? "✓ All picks saved" : "";
+  const statusColor = saveState === "error" ? "var(--red)" : saveState === "saved" ? "var(--accent-2)" : "var(--ink-mute)";
 
   if (selected.length === 0) {
     return <div className="empty"><div className="empty-title">FIXTURES NOT SET</div><p>The admin hasn't selected this gameweek's score-prediction fixtures yet. Check back once they do.</p></div>;
@@ -2202,7 +2329,12 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
   return (
     <div>
       {locked && <div className="lock-banner">🔒 Score predictions for GW{gw} are locked.</div>}
-      <p className="helper" style={{ marginBottom:16 }}>Predict the exact scoreline — it saves automatically as you type. Outcome = {sc.scoreOutcome} pt · exact = {sc.scoreExact} pts. Predict a total above {sc.gfThreshold} for a shot at the Goal Fest Bonus.</p>
+      <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:12, flexWrap:'wrap', marginBottom:16 }}>
+        <p className="helper" style={{ margin:0, flex:'1 1 320px' }}>Predict the exact scoreline — it saves automatically as you type. Outcome = {sc.scoreOutcome} pt · exact = {sc.scoreExact} pts. Predict a total above {sc.gfThreshold} for a shot at the Goal Fest Bonus.</p>
+        {!locked && statusText && (
+          <span style={{ fontFamily:'JetBrains Mono, monospace', fontSize:11, letterSpacing:'0.08em', color:statusColor, whiteSpace:'nowrap' }}>{statusText}</span>
+        )}
+      </div>
       {selected.map(f => {
         const val = preds[f.id] || "";
         const parts = val.split("-");
