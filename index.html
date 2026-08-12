@@ -1220,7 +1220,7 @@ const NAV_ITEMS = [
   { id: "fixtures",    icon: "📅", label: "Fixtures",   short: "Fixtures" },
   { id: "picks",       icon: "👀", label: "Picks",      short: "Picks" },
   { id: "leaderboard", icon: "🏆", label: "Leaderboard", short: "Table" },
-  { id: "home",        icon: "🏠", label: "Home",       short: "Home" },
+  { id: "home",        icon: "🧠", label: "Pundit HQ",       short: "HQ" },
   { id: "admin",       icon: "⚙️", label: "Admin",      short: "Admin", adminOnly: true },
 ];
 const PREDICT_VIEWS = NAV_ITEMS.filter(i => i.pred).map(i => i.id);
@@ -2170,7 +2170,7 @@ function PLTable({ state, fpl }) {
   const blockTop = (state && state.survivorBlockTop != null) ? Number(state.survivorBlockTop) : 3;
   const [all, setAll] = useState(null);
   useEffect(() => { let alive=true; fplAllFixtures().then(fx => { if (alive) setAll(fx||[]); }).catch(()=>{ if(alive) setAll([]); }); return ()=>{alive=false;}; }, []);
-  if (!boot || !boot.teams) return <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>⚠️ Couldn't load FPL data. The table works once deployed on Vercel; if you're live, hit Refresh on the Home tab.</div>;
+  if (!boot || !boot.teams) return <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>⚠️ Couldn't load FPL data. The table works once deployed on Vercel; if you're live, hit Refresh on Pundit HQ.</div>;
   if (all === null) return <div className="empty-mini">Loading the table…</div>;
   const teams = Object.values(boot.teams);
   const rows = buildLeagueTable(teams, all);
@@ -2262,7 +2262,7 @@ function FdrGrid({ state, fpl }) {
     requestAnimationFrame(() => jumpToNow(false));
   }, [all, curGW]);
 
-  if (!boot || !boot.teams) return <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>⚠️ Couldn't load FPL data. The FDR grid works once deployed on Vercel; if you're live, hit Refresh on the Home tab.</div>;
+  if (!boot || !boot.teams) return <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>⚠️ Couldn't load FPL data. The FDR grid works once deployed on Vercel; if you're live, hit Refresh on Pundit HQ.</div>;
   if (all === null) return <div className="empty-mini">Loading fixture difficulty…</div>;
   if (all.length === 0) return <div className="empty"><div className="empty-title">NO FIXTURES YET</div><p>Fixture difficulty appears once the FPL schedule is published.</p></div>;
 
@@ -2359,7 +2359,7 @@ function FixturesByWeek({ state, fpl }) {
         </select>
         <button className="btn btn-sm" onClick={()=>setSelGW(g => Math.min(TOTAL_GW, g+1))}>+</button>
       </div>
-      {!boot && <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>⚠️ Couldn't load FPL fixtures. They load once deployed on Vercel; if you're live, hit Refresh on the Home tab.</div>}
+      {!boot && <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>⚠️ Couldn't load FPL fixtures. They load once deployed on Vercel; if you're live, hit Refresh on Pundit HQ.</div>}
       {fixtures.length === 0 ? (
         <div className="empty"><div className="empty-title">NO FIXTURES YET</div><p>FPL fixtures for GW{selGW} aren't available yet. They usually appear once the schedule is confirmed.</p></div>
       ) : Object.entries(groups).map(([day, fx]) => (
@@ -2436,7 +2436,7 @@ function PredictView({ state, myPred, users, fpl, updateMyPred, showToast, tab, 
         <h1 className="page-title">{meta.lead} <span className="it">{meta.word}</span></h1>
       </div>
 
-      {!boot && <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>⚠️ Couldn't load FPL data (teams/players/fixtures). It works once deployed on Vercel; if you're seeing this live, hit Refresh on the Home page.</div>}
+      {!boot && <div className="lock-banner" style={{ borderColor:'rgba(255,77,77,0.3)', color:'var(--red)' }}>⚠️ Couldn't load FPL data (teams/players/fixtures). It works once deployed on Vercel; if you're seeing this live, hit Refresh on Pundit HQ.</div>}
 
       {tab==="scores" && <ScoresTab state={state} gw={gw} locked={locked} fixtures={fixtures} boot={boot} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} saveState={saveState} />}
       {tab==="f4" && <F4Tab state={state} gw={gw} locked={locked} live={live} boot={boot} fixtures={fixtures} myPred={myPred} updateMyPred={updateMyPred} showToast={showToast} />}
