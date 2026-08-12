@@ -472,6 +472,38 @@
   .pl-dot.svtop { background:var(--yellow); }
   .pl-dot.rel { background:var(--red); }
   @media (max-width:560px){ .pl-hide { display:none; } .pl-table { min-width:360px; } }
+
+  /* ---------------- Picks tab: freeze panes ----------------
+     The pundit column locks to the left and the fixture row locks to the top,
+     so on a phone you can scroll sideways through the fixtures and still see
+     WHO each row belongs to and WHICH match each column is.
+     Note: border-collapse must be `separate` — sticky cells and `collapse`
+     misbehave badly in Safari (borders vanish, cells bleed through). */
+  .pk-wrap { overflow:auto; max-height:min(72vh, 620px); -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
+  .pk-table { border-collapse:separate; border-spacing:0; }
+  .pk-table thead th { position:sticky; top:0; z-index:3; background:var(--card); }
+  .pk-table th:first-child, .pk-table td:first-child { position:sticky; left:0; z-index:2; background:var(--card);
+    box-shadow: inset -1px 0 0 var(--line-bright); }
+  .pk-table thead th:first-child { z-index:4; box-shadow: inset -1px 0 0 var(--line-bright); }
+  /* the pundit name cell */
+  .pk-name { font-weight:600; }
+  .pk-nm { display:block; }
+  .pk-you { display:inline-block; margin-top:3px; font-family:'JetBrains Mono', monospace; font-size:9px;
+    letter-spacing:0.12em; text-transform:uppercase; color:var(--accent); background:rgba(233,0,82,0.10);
+    border:1px solid rgba(233,0,82,0.45); border-radius:999px; padding:1px 7px; }
+  /* YOUR row: banded top and bottom, accent bar on the frozen cell, bold name.
+     Bands use box-shadow rather than background so the green/yellow/red result
+     colours in the data cells stay exactly as they are. */
+  .pk-table tr.pk-me td { box-shadow: inset 0 1px 0 rgba(233,0,82,0.45), inset 0 -1px 0 rgba(233,0,82,0.45); }
+  .pk-table tr.pk-me td:first-child { background:var(--card-2);
+    box-shadow: inset -1px 0 0 var(--line-bright), inset 3px 0 0 var(--accent),
+                inset 0 1px 0 rgba(233,0,82,0.45), inset 0 -1px 0 rgba(233,0,82,0.45); }
+  .pk-table tr.pk-me .pk-nm { color:var(--accent); font-weight:800; }
+  @media (max-width:560px){
+    .pk-table th:first-child, .pk-table td:first-child { min-width:104px; max-width:136px; }
+    .pk-table .pk-nm { font-size:12.5px; line-height:1.25; }
+    .pk-wrap { max-height:min(68vh, 560px); }
+  }
 </style>
 </head>
 <body>
@@ -735,7 +767,7 @@ async function fplAllFixtures(force) {
 // Cloud console. This one is *meant* to be public (Google's own button needs
 // it client-side) — it is an identifier, not a secret.
 const GOOGLE_CLIENT_ID = "901965344611-g2cc7mpeqf1fj8pismatrrd4oer6nr1i.apps.googleusercontent.com";
-const APP_VERSION = 20260812;   // bump on every deploy — clients on an older build get flushed automatically
+const APP_VERSION = 20260813;   // bump on every deploy — clients on an older build get flushed automatically
 const TOTAL_GW = 38;
 const HALF_SPLIT = 19; // GW1-19 first half, GW20-38 second half
 const POSITIONS = ["GK", "DEF", "MID", "FWD"];
@@ -2895,6 +2927,16 @@ function PicksView({ state, users, currentUser, fpl }) {
   };
   const pp = id => (id != null && live[id] != null) ? Number(live[id]) : null;
   const nm = id => (id != null && players[id]) ? players[id].name : "—";
+  // One renderer for the frozen pundit column, so all four tables agree and
+  // your own row is marked the same way everywhere.
+  const isMe = u => u.name === currentUser;
+  const rowCls = u => isMe(u) ? "pk-me" : undefined;
+  const nameCell = u => (
+    <td className="pk-name">
+      <span className="pk-nm">{u.name}</span>
+      {isMe(u) && <span className="pk-you">you</span>}
+    </td>
+  );
 
   return (
     <div>
@@ -2910,20 +2952,20 @@ function PicksView({ state, users, currentUser, fpl }) {
         </select>
       </div>
 
-      <div className="card" style={{ marginBottom:18, overflowX:'auto' }}>
+      <div className="card" style={{ marginBottom:18 }}>
         <div className="card-title">Score Predictions</div>
         {selFixtures.length === 0 ? <div className="empty-mini">No fixtures were selected for this GW.</div> : (
-          <table className="lb-table" style={{ minWidth:520 }}>
+          <div className="pk-wrap"><table className="lb-table pk-table" style={{ minWidth:520 }}>
             <thead><tr><th>Pundit</th>{selFixtures.map(f => <th key={f.id} style={{textAlign:'center'}}>{f.teamH} {f.finished ? (f.hScore+"-"+f.aScore) : "v"} {f.teamA}</th>)}</tr></thead>
             <tbody>
               {named.map(u => {
                 const preds = (u.scores && u.scores[gw]) || {};
-                return <tr key={u.name}><td style={{fontWeight:600}}>{u.name}{u.name===currentUser?" · you":""}</td>
+                return <tr key={u.name} className={rowCls(u)}>{nameCell(u)}
                   {selFixtures.map(f => { const cls = scoreCellClass(preds[f.id], f); return <td key={f.id} className={cls} style={{textAlign:'center', fontFamily:'JetBrains Mono'}}>{preds[f.id]||"—"}</td>; })}
                 </tr>;
               })}
             </tbody>
-          </table>
+          </table></div>
         )}
         <div className="pk-legend"><span><span className="pk-dot" style={{background:'var(--accent-2)'}}></span>Exact score</span><span><span className="pk-dot" style={{background:'var(--yellow)'}}></span>Right result</span><span><span className="pk-dot" style={{background:'var(--red)'}}></span>Wrong</span></div>
       </div>
@@ -2931,23 +2973,23 @@ function PicksView({ state, users, currentUser, fpl }) {
       <div className="grid grid-2">
         <div className="card">
           <div className="card-title">Survivor</div>
-          <table className="lb-table">
+          <div className="pk-wrap"><table className="lb-table pk-table">
             <thead><tr><th>Pundit</th><th>Pick</th><th>Result</th></tr></thead>
             <tbody>
               {named.map(u => {
                 const sp = (u.survivor && u.survivor[gw]) || null;
                 const r = sp ? teamSurvives(sp, gw, fixtures) : null;
                 const cls = (r && r.decided) ? (r.survives ? "pk-good" : "pk-bad") : "";
-                return <tr key={u.name}><td style={{fontWeight:600}}>{u.name}{u.name===currentUser?" · you":""}</td>
+                return <tr key={u.name} className={rowCls(u)}>{nameCell(u)}
                   <td style={{fontFamily:'JetBrains Mono'}}>{sp || "—"}</td>
                   <td className={cls} style={{fontFamily:'JetBrains Mono', fontSize:12}}>{(r && r.decided) ? (r.survives ? "✓ won" : "✗ out") : (sp ? "—" : "")}</td></tr>;
               })}
             </tbody>
-          </table>
+          </table></div>
         </div>
-        <div className="card" style={{ overflowX:'auto' }}>
+        <div className="card">
           <div className="card-title">Fantastic Four</div>
-          <table className="lb-table" style={{ minWidth:420 }}>
+          <div className="pk-wrap"><table className="lb-table pk-table" style={{ minWidth:420 }}>
             <thead><tr><th>Pundit</th><th>GK</th><th>DEF</th><th>MID</th><th>FWD</th><th>Pts</th></tr></thead>
             <tbody>
               {named.map(u => {
@@ -2955,28 +2997,28 @@ function PicksView({ state, users, currentUser, fpl }) {
                 const ids = [f4.gk, f4.def, f4.mid, f4.fwd];
                 const tot = ids.reduce((a,id)=>a+(pp(id)||0), 0);
                 const cell = (id,key) => { const v = pp(id); return <td key={key} className={v>0?"pk-good":""}>{nm(id)}{v!=null?(" "+v):""}</td>; };
-                return <tr key={u.name}><td style={{fontWeight:600}}>{u.name}{u.name===currentUser?" · you":""}</td>
+                return <tr key={u.name} className={rowCls(u)}>{nameCell(u)}
                   {cell(f4.gk,"gk")}{cell(f4.def,"def")}{cell(f4.mid,"mid")}{cell(f4.fwd,"fwd")}
                   <td style={{fontFamily:'Anton', color:'var(--accent-2)'}}>{tot}</td></tr>;
               })}
             </tbody>
-          </table>
+          </table></div>
         </div>
       </div>
 
       {bonusQs.length > 0 && (
-        <div className="card" style={{ marginTop:18, overflowX:'auto' }}>
+        <div className="card" style={{ marginTop:18 }}>
           <div className="card-title">Bonus answers</div>
-          <table className="lb-table" style={{ minWidth:480 }}>
+          <div className="pk-wrap"><table className="lb-table pk-table" style={{ minWidth:480 }}>
             <thead><tr><th>Pundit</th>{bonusQs.map(q => <th key={q.id}>{q.text}{q.answer!=null && q.answer!=="" ? (" → " + q.answer) : ""}</th>)}</tr></thead>
             <tbody>
               {named.map(u => {
                 const ba = (u.bonusAnswers && u.bonusAnswers[gw]) || {};
-                return <tr key={u.name}><td style={{fontWeight:600}}>{u.name}{u.name===currentUser?" · you":""}</td>
+                return <tr key={u.name} className={rowCls(u)}>{nameCell(u)}
                   {bonusQs.map(q => { const a = ba[q.id]; const settled = q.answer != null && q.answer !== ""; const has = a != null && a !== ""; const cls = (settled && has) ? (String(a)===String(q.answer) ? "pk-good" : "pk-bad") : ""; return <td key={q.id} className={cls} style={{fontFamily:'JetBrains Mono'}}>{has ? a : "—"}</td>; })}</tr>;
               })}
             </tbody>
-          </table>
+          </table></div>
         </div>
       )}
     </div>
