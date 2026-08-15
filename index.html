@@ -28,6 +28,7 @@
     --green: #00ff87;
     --red: #ff4d4d;
     --yellow: #ffd43b;
+    --pt-low: #8ef0b8;   /* pale green — the smaller point value */
   }
   html.light {
     --bg:#f5f3fb; --bg-2:#ffffff; --card:#ffffff; --card-2:#f3eefb;
@@ -35,6 +36,7 @@
     --ink:#1b1430; --ink-dim:#4c4363; --ink-mute:#857aa0;
     --accent:#e90052; --accent-2:#06a35a; --green:#06a35a;
     --red:#d92d2d; --yellow:#b07d00; --purple:#7c3aed; --cyan:#0891b2;
+    --pt-low:#0b8f4a;
   }
   html.light body {
     background-image:
@@ -222,6 +224,17 @@
   }
   @media (max-width:380px){ .dl-k { display:none; } }
 
+  /* ---------------- point values, colour-coded by size ----------------
+     Same scale everywhere: pale green = the small reward, vivid green = the big
+     one, yellow = a bonus, red = a penalty. */
+  .pt-low   { color:var(--pt-low);   font-weight:800; }
+  .pt-high  { color:var(--accent-2); font-weight:800; }
+  .pt-bonus { color:var(--yellow);   font-weight:800; }
+  .pt-pen   { color:var(--red);      font-weight:800; }
+  /* survivor chip's second line: "H v [badge] COV" */
+  .sv-line { display:flex !important; align-items:center; justify-content:center; gap:4px; }
+  .sv-line .tbadge, .sv-line .tbadge-fallback { flex:0 0 auto; }
+
   .page-head { margin-bottom: 32px; }
   .eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent); letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 12px; }
   .page-title { font-family: 'Anton', sans-serif; font-size: clamp(38px, 7vw, 84px); line-height: 0.92; letter-spacing: -0.01em; text-transform: uppercase; }
@@ -316,6 +329,9 @@
   .pk-controls { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
   .pk-controls .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .pk-input, .pk-select { width:100%; background:var(--bg-2); border:1px solid var(--line); color:var(--ink); padding:10px 12px; border-radius:6px; font-size:14px; }
+  .cmp-note { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    margin-bottom:10px; padding:10px 12px; border-radius:8px; font-size:13px; color:var(--ink-dim);
+    background:rgba(0,255,135,0.07); border:1px solid rgba(0,255,135,0.3); }
   .pcard { display:flex; align-items:center; gap:12px; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--bg-2); margin-bottom:8px; }
   .pcard .pinfo { flex:1; min-width:0; }
   .pcard .pname { font-weight:700; font-size:15px; }
@@ -835,7 +851,7 @@ async function fplAllFixtures(force) {
 // Cloud console. This one is *meant* to be public (Google's own button needs
 // it client-side) — it is an identifier, not a secret.
 const GOOGLE_CLIENT_ID = "901965344611-g2cc7mpeqf1fj8pismatrrd4oer6nr1i.apps.googleusercontent.com";
-const APP_VERSION = 20260816;   // bump on every deploy — clients on an older build get flushed automatically
+const APP_VERSION = 20260817;   // bump on every deploy — clients on an older build get flushed automatically
 const TOTAL_GW = 38;
 const HALF_SPLIT = 19; // GW1-19 first half, GW20-38 second half
 const POSITIONS = ["GK", "DEF", "MID", "FWD"];
@@ -846,6 +862,7 @@ const DEFAULT_SCORING = {
   gfOutcome: 1, gfExact: 2, gfThreshold: 4, // total must be strictly greater than 4
   teamWin: 3, teamOverPenalty: 1, teamMaxUses: 2,
   f4Multiplier: 1,
+  f4MissPenalty: 5,      // deducted if the deadline passes with an empty Fantastic Four
   survivorWinBonus: 1,   // points for winning a survivor round (admin-configurable)
 };
 
@@ -986,11 +1003,34 @@ function gwLocked(state, fpl, gw, now) {
 //   fpl = { fixturesByGW: {gw:[fx]}, liveByGW: {gw:{id:pts}} }
 //   Scores gameweeks 1..activeGW (unfinished fixtures naturally score 0).
 // ============================================================
+// Has this Fantastic Four actually been filled in at all?
+function f4Submitted(f4) { return !!(f4 && (f4.gk || f4.def || f4.mid || f4.fwd)); }
+
+// The first gameweek a pundit can be held responsible for. Someone who joins in
+// GW10 must not collect nine missed-F4 penalties for weeks they weren't here.
+// Prefers their join timestamp; legacy records with no timestamp fall back to
+// the earliest gameweek they picked anything at all.
+function firstAccountableGW(pred, fpl) {
+  if (pred && pred.joined) {
+    for (let gw = 1; gw <= TOTAL_GW; gw++) {
+      const ms = eventDeadlineMs(fpl, gw);
+      if (ms == null || ms >= pred.joined) return gw;
+    }
+    return TOTAL_GW + 1;
+  }
+  const seen = [];
+  ["scores", "f4", "survivor", "bonusAnswers"].forEach(k =>
+    Object.keys((pred && pred[k]) || {}).forEach(g => { const n = parseInt(g, 10); if (n) seen.push(n); }));
+  return seen.length ? Math.min(...seen) : TOTAL_GW + 1;
+}
+
 function computeUserSeason(pred, state, fpl, maxGWOverride) {
   const cfg = state.scoring || DEFAULT_SCORING;
   const bd = { scores: 0, f4: 0, bonus: 0 };
   const perGW = {};
   const maxGW = (maxGWOverride != null) ? maxGWOverride : (state.activeGW || 1);
+  const penalty = Number(cfg.f4MissPenalty) || 0;
+  const accountableFrom = penalty > 0 ? firstAccountableGW(pred, fpl) : Infinity;
   for (let gw = 1; gw <= maxGW; gw++) {
     const gwFx = (fpl.fixturesByGW && fpl.fixturesByGW[gw]) || [];
     const live = (fpl.liveByGW && fpl.liveByGW[gw]) || {};
@@ -1002,7 +1042,8 @@ function computeUserSeason(pred, state, fpl, maxGWOverride) {
       if (fx) sPts += scoreFixturePoints(preds[fid], fx, cfg);
     });
     const f4 = (pred.f4 && pred.f4[gw]) || null;
-    if (f4) fPts += f4Points(f4, live, cfg);
+    if (f4Submitted(f4)) fPts += f4Points(f4, live, cfg);
+    else if (penalty > 0 && gw >= accountableFrom && gwLocked(state, fpl, gw)) fPts -= penalty;
     const bq = (state.bonus && state.bonus[gw]) || [];
     const bans = (pred.bonusAnswers && pred.bonusAnswers[gw]) || {};
     bq.forEach(q => {
@@ -1364,6 +1405,7 @@ function App() {
     if (s.survivorEnabled === undefined) { s.survivorEnabled = true; save = true; }
     if (!Array.isArray(s.survivorRounds)) { s.survivorRounds = []; save = true; }
     if (s.scoring && s.scoring.survivorWinBonus === undefined) { s.scoring.survivorWinBonus = 1; save = true; }
+    if (s.scoring && s.scoring.f4MissPenalty === undefined) { s.scoring.f4MissPenalty = 5; save = true; }
     if (s.survivorBlockTop === undefined) { s.survivorBlockTop = 3; save = true; }   // top-3 clubs off-limits in survivor
     if (!s.activeGW) { s.activeGW = 1; save = true; }
     if (!s.openGWs || !s.openGWs.length) { s.openGWs = [s.activeGW || 1]; save = true; }
@@ -1968,6 +2010,7 @@ function HomeRulesView(props) {
 function RulesView({ state }) {
   const sc = state.scoring || DEFAULT_SCORING;
   const blockTop = (state.survivorBlockTop != null) ? Number(state.survivorBlockTop) : 3;
+  const f4Pen = Number(sc.f4MissPenalty) || 0;
   return (
     <div>
       <div className="page-head">
@@ -1979,25 +2022,33 @@ function RulesView({ state }) {
           <div className="card-title">1 · Score Predictions</div>
           <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Predict the scoreline (X-X) for the {state.scoresPerGW} selected fixtures each gameweek. Double gameweeks may add extra fixtures for bonus points.</p>
           <ul className="rules-list compact" style={{ marginTop:12 }}>
-            <li><span className="rule-name">Correct outcome</span><span className="rule-points">{sc.scoreOutcome}</span></li>
-            <li><span className="rule-name">Exact result</span><span className="rule-points">{sc.scoreExact}</span></li>
+            <li><span className="rule-name">Correct outcome</span><span className="rule-points" style={{ color:'var(--pt-low)' }}>{sc.scoreOutcome}</span></li>
+            <li><span className="rule-name">Exact result</span><span className="rule-points" style={{ color:'var(--accent-2)' }}>{sc.scoreExact}</span></li>
           </ul>
           <div style={{ marginTop:14, padding:'14px 16px', background:'var(--bg-2)', border:'1px solid rgba(255,212,59,0.3)', borderRadius:6 }}>
             <div style={{ fontFamily:'Anton', fontSize:16, color:'var(--yellow)', letterSpacing:'0.04em' }}>⚡ GOAL FEST BONUS</div>
             <p style={{ color:'var(--ink-dim)', fontSize:13, lineHeight:1.6, marginTop:8 }}>
-              When your predicted total is above {sc.gfThreshold} goals AND the real game also has more than {sc.gfThreshold} total goals: <strong style={{color:'var(--ink)'}}>+{sc.gfOutcome}</strong> bonus for the right outcome, <strong style={{color:'var(--ink)'}}>+{sc.gfExact}</strong> for the exact result. (4-0 doesn't qualify — the total must be more than 4.)
+              When your predicted total is above {sc.gfThreshold} goals AND the real game also has more than {sc.gfThreshold} total goals: <span className="pt-bonus">+{sc.gfOutcome}</span> bonus for the right outcome, <span className="pt-bonus">+{sc.gfExact}</span> for the exact result. (4-0 doesn't qualify — the total must be more than 4.)
             </p>
-            <p style={{ color:'var(--ink-mute)', fontSize:12, lineHeight:1.5, marginTop:8 }}>e.g. predict 4-1: if it ends 4-2 you get {sc.scoreOutcome + sc.gfOutcome}; if it ends 4-1 you get {sc.scoreExact + sc.gfExact}.</p>
+            <p style={{ color:'var(--ink-mute)', fontSize:12, lineHeight:1.5, marginTop:8 }}>e.g. predict 4-1: if it ends 4-2 you get <span className="pt-bonus">{sc.scoreOutcome + sc.gfOutcome}</span>; if it ends 4-1 you get <span className="pt-bonus">{sc.scoreExact + sc.gfExact}</span>.</p>
           </div>
         </div>
         <div className="card">
           <div className="card-title">2 · Survivor</div>
-          <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Each gameweek, pick one team to <strong style={{color:'var(--ink)'}}>win</strong>. Win → you advance; a draw, a loss or a missed deadline → you're out for the round. You score <strong>1 point for every week you survive</strong>, plus a winner bonus when a round settles.</p>
+          <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Each gameweek, pick one team to <strong style={{color:'var(--ink)'}}>win</strong>. Win → you advance; a draw, a loss or a missed deadline → you're out for the round. You score <span className="pt-low">1 pt</span> for every week you survive, plus <span className="pt-high">+{(sc.survivorWinBonus != null) ? sc.survivorWinBonus : 1}</span> for winning a round.</p>
           <p className="helper" style={{ marginTop:12 }}>Three things are off the board: any club in the <strong style={{color:'var(--yellow)'}}>top {blockTop}</strong> of the table, anyone <strong>playing a bottom-3</strong> club, and any club <strong>you've already used this round</strong> (Gameweek 1 exempt). Your options shrink every week you survive — that's the point. Full rules in the card below.</p>
           <div className="divider" style={{ margin:'20px 0' }}></div>
           <div className="card-title" style={{ fontSize:20 }}>3 · Fantastic Four</div>
-          <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Pick a GK, defender, midfielder and forward. You score the <strong style={{color:'var(--ink)'}}>sum of their real FPL points</strong> that gameweek — bonuses included.</p>
-          <p className="helper" style={{ marginTop:10 }}>Defender & midfielder: usable <strong>once</strong> all season. Goalkeeper & forward: <strong>twice</strong>, but once in GW1-{HALF_SPLIT} and once in GW{HALF_SPLIT+1}-{TOTAL_GW}. Used players drop out of the menus automatically.</p>
+          <p style={{ color:'var(--ink-dim)', fontSize:14, lineHeight:1.65 }}>Pick a GK, defender, midfielder and forward. You score the <span className="pt-high">sum of their real FPL points</span> that gameweek — bonuses included.</p>
+          {f4Pen > 0 && (
+            <div style={{ marginTop:14, padding:'12px 14px', background:'var(--bg-2)', border:'1px solid rgba(255,77,77,0.35)', borderRadius:6 }}>
+              <div style={{ fontFamily:'Anton', fontSize:16, color:'var(--red)', letterSpacing:'0.04em' }}>⚠️ MISS IT AND YOU LOSE POINTS</div>
+              <p style={{ color:'var(--ink-dim)', fontSize:13, lineHeight:1.6, marginTop:8 }}>
+                Let the deadline pass without submitting a Fantastic Four and you take <span className="pt-pen">−{f4Pen} pts</span> for that gameweek. Even one name in one slot avoids it — an empty four is the only thing that's punished.
+              </p>
+            </div>
+          )}
+          <p className="helper" style={{ marginTop:10 }}>Defender &amp; midfielder: usable <strong>once</strong> all season. Goalkeeper &amp; forward: <strong>twice</strong>, but once in GW1-{HALF_SPLIT} and once in GW{HALF_SPLIT+1}-{TOTAL_GW}. Used players drop out of the menus automatically.</p>
         </div>
       </div>
       <div className="card" style={{ marginTop:18 }}>
@@ -2036,8 +2087,9 @@ function RulesView({ state }) {
 
         <div style={{ fontFamily:'JetBrains Mono', fontSize:11, letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--ink-mute)', margin:'22px 0 10px' }}>Scoring</div>
         <ul className="rules-list">
-          <li><span className="rule-name">Every week you survive</span><span className="rule-points">1</span></li>
-          <li><span className="rule-name">Winning a round (final survivors)</span><span className="rule-points">{(sc.survivorWinBonus != null) ? sc.survivorWinBonus : 1}</span></li>
+          <li><span className="rule-name">Every week you survive</span><span className="rule-points" style={{ color:'var(--pt-low)' }}>+1</span></li>
+          <li><span className="rule-name">Winning a round (final survivors)</span><span className="rule-points" style={{ color:'var(--accent-2)' }}>+{(sc.survivorWinBonus != null) ? sc.survivorWinBonus : 1}</span></li>
+          <li><span className="rule-name">Draw, loss or no pick</span><span className="rule-points" style={{ color:'var(--red)', fontSize:18 }}>OUT</span></li>
         </ul>
 
         <div style={{ fontFamily:'JetBrains Mono', fontSize:11, letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--ink-mute)', margin:'22px 0 10px' }}>How a round ends</div>
@@ -2108,12 +2160,16 @@ function teamCodeByShort(boot, short) {
 }
 function fplBadgeUrl(code) { return (code == null) ? null : ("https://resources.premierleague.com/premierleague/badges/70/t" + code + ".png"); }
 // Club crest with a guaranteed text fallback — if the image can't load, shows the short code.
-function TeamBadge({ short, code, boot, size, className }) {
+// hideOnFail: use where the club's short code is already printed as text right
+// next to the crest. Without it a failed image falls back to that same code and
+// you get "H v COVCOV".
+function TeamBadge({ short, code, boot, size, className, hideOnFail }) {
   const s = size || 22;
   const c = (code != null) ? code : teamCodeByShort(boot, short);
   const [err, setErr] = useState(false);
   const url = fplBadgeUrl(c);
   if (!url || err) {
+    if (hideOnFail) return null;
     return <span className={"tbadge-fallback " + (className || "")} style={{ width:s, height:s, fontSize: Math.max(8, Math.round(s * 0.32)) }}>{(short || "").slice(0,3)}</span>;
   }
   return <img className={"tbadge " + (className || "")} src={url} alt={short || ""} width={s} height={s} onError={()=>setErr(true)} />;
@@ -2520,7 +2576,11 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
     <div>
       {locked && <div className="lock-banner">🔒 Score predictions for GW{gw} are locked.</div>}
       <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:12, flexWrap:'wrap', marginBottom:16 }}>
-        <p className="helper" style={{ margin:0, flex:'1 1 320px' }}>Predict the exact scoreline — it saves automatically as you type. Outcome = {sc.scoreOutcome} pt · exact = {sc.scoreExact} pts. Predict a total above {sc.gfThreshold} for a shot at the Goal Fest Bonus.</p>
+        <p className="helper" style={{ margin:0, flex:'1 1 320px' }}>
+          Saves as you type. Right result <span className="pt-low">{sc.scoreOutcome} pt</span> · exact score <span className="pt-high">{sc.scoreExact} pts</span>.
+          {" "}<span className="pt-bonus">⚡ Goal Fest</span> — predict over {sc.gfThreshold} total goals and if the real game also goes over,
+          add <span className="pt-bonus">+{sc.gfOutcome}</span> on a right result or <span className="pt-bonus">+{sc.gfExact}</span> on an exact score.
+        </p>
         {!locked && statusText && (
           <span style={{ fontFamily:'JetBrains Mono, monospace', fontSize:11, letterSpacing:'0.08em', color:statusColor, whiteSpace:'nowrap' }}>{statusText}</span>
         )}
@@ -2662,6 +2722,7 @@ function TeamTab({ state, gw, locked, fixtures, boot, fpl, myPred, updateMyPred,
 
 function F4Tab({ state, gw, locked, live, boot, fixtures, myPred, updateMyPred, showToast }) {
   const sc = state.scoring || DEFAULT_SCORING;
+  const f4Pen = Number(sc.f4MissPenalty) || 0;
   if (!boot || !boot.players) return <div className="empty"><div className="empty-title">PLAYERS LOADING</div><p>FPL player data isn't available yet.</p></div>;
   const players = boot.players;
   const teams = boot.teams;
@@ -2674,14 +2735,21 @@ function F4Tab({ state, gw, locked, live, boot, fixtures, myPred, updateMyPred, 
     updateMyPred(p => ({ ...p, f4: { ...p.f4, [gw]: { ...(p.f4 && p.f4[gw]), [slotKey[pos]]: playerId || undefined } } }));
   };
   const teamList = Object.values(teams || {}).sort((a,b)=>a.name.localeCompare(b.name));
-  const sum = f4Points(f4, live, sc);
   const hasAny = POSITIONS.some(pos => f4[slotKey[pos]]);
+  // Once the week is locked with nothing picked, the total IS the penalty —
+  // showing 0 here would contradict the leaderboard.
+  const missed = locked && !hasAny && f4Pen > 0;
+  const sum = missed ? -f4Pen : f4Points(f4, live, sc);
   const clearAll = () => { if (locked) { showToast("Gameweek locked"); return; } updateMyPred(p => ({ ...p, f4: { ...p.f4, [gw]: {} } })); };
   const pitchOrder = ["GK","DEF","MID","FWD"];
   return (
     <div>
-      {locked && <div className="lock-banner">🔒 Fantastic Four for GW{gw} is locked.</div>}
-      <p className="helper" style={{ marginBottom:16 }}>Tap a spot on the pitch to pick that position — you score the sum of your four players' real FPL points. DEF/MID: once all season. GK/FWD: twice, once per half.</p>
+      {locked && <div className="lock-banner">🔒 Fantastic Four for GW{gw} is locked.{missed ? <> No picks were submitted — <span className="pt-pen">−{f4Pen} pts</span>.</> : null}</div>}
+      <p className="helper" style={{ marginBottom:16 }}>
+        Tap a spot on the pitch to pick that position — you score the <span className="pt-high">sum of your four players' real FPL points</span>.
+        {f4Pen > 0 ? <> Leave it empty past the deadline and it's <span className="pt-pen">−{f4Pen} pts</span>.</> : null}
+        {" "}DEF/MID: once all season. GK/FWD: twice, once per half.
+      </p>
       <div className="pitch">
         <div className="pitch-box top"></div>
         <div className="pitch-box bottom"></div>
@@ -2700,7 +2768,7 @@ function F4Tab({ state, gw, locked, live, boot, fixtures, myPred, updateMyPred, 
         <div className="card-title" style={{ margin:0, fontSize:18 }}>Fantastic Four total (GW{gw})</div>
         <div style={{ display:'flex', alignItems:'center', gap:14 }}>
           {!locked && hasAny && <button className="btn btn-ghost btn-sm" onClick={clearAll}>✕ Clear all</button>}
-          <div style={{ fontFamily:'Anton', fontSize:32, color:'var(--accent-2)' }}>{sum}</div>
+          <div style={{ fontFamily:'Anton', fontSize:32, color: sum < 0 ? 'var(--red)' : 'var(--accent-2)' }}>{sum}</div>
         </div>
       </div>
     </div>
@@ -2758,7 +2826,12 @@ function F4PickerModal({ pos, gw, current, players, teams, teamsById, isAvailabl
   const [q, setQ] = useState("");
   const [club, setClub] = useState("");
   const [sort, setSort] = useState("pts");
-  const [compareId, setCompareId] = useState(null);
+  // Up to two players staged for comparison. With an empty slot the old
+  // "current vs candidate" view had nothing on the left, so you couldn't
+  // compare anything until you'd already picked someone. Now two candidates can
+  // go head to head, and you can pick either straight from the comparison.
+  const [cmp, setCmp] = useState([]);
+  const toggleCmp = (id) => setCmp(c => c.includes(id) ? c.filter(x => x !== id) : (c.length >= 2 ? [c[1], id] : [...c, id]));
   const num = v => { const n = parseFloat(v); return isNaN(n) ? -1 : n; };
   const candidates = useMemo(() => {
     let list = Object.values(players).filter(pl => pl.pos === pos && (isAvailable(pl.id, pos, gw) || (current && current.id === pl.id)));
@@ -2772,21 +2845,34 @@ function F4PickerModal({ pos, gw, current, players, teams, teamsById, isAvailabl
       return num(b.pts) - num(a.pts);
     });
   }, [players, pos, gw, club, q, sort, isAvailable, current]);
-  const compare = compareId ? players[compareId] : null;
+  const staged = cmp.map(id => players[id]).filter(Boolean);
+  // Two staged => head to head. One staged + an existing pick => swap check.
+  const duel = staged.length === 2;
+  const showCompare = duel || (staged.length === 1 && !!current);
+  const left  = duel ? staged[0] : current;
+  const right = duel ? staged[1] : staged[0];
   const fixOf = (pl) => { const l = playerFixtureLabels(fixtures, teamsById, pl.teamId); return l.length ? l.join(", ") : "—"; };
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
         <div className="modal-head">
-          <h3>{compare ? "Compare Players" : ("Select " + pos)}</h3>
+          <h3>{showCompare ? "Compare Players" : ("Select " + pos)}</h3>
           <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
-          {compare ? (
+          {showCompare ? (
             <div className="cmp">
-              <div className="col"><h4>CURRENT PICK</h4>{current ? <F4CompareCol pl={current} fixOf={fixOf} boot={boot} /> : <div style={{ textAlign:'center', color:'var(--ink-mute)', paddingTop:20 }}>Empty slot</div>}</div>
+              <div className="col">
+                <h4>{duel ? "OPTION A" : "CURRENT PICK"}</h4>
+                <F4CompareCol pl={left} fixOf={fixOf} boot={boot} />
+                {duel && <button className="btn btn-primary btn-sm" style={{ marginTop:12, width:'100%', justifyContent:'center' }} onClick={()=>onPick(left.id)}>Pick {left.name}</button>}
+              </div>
               <div className="vs">VS</div>
-              <div className="col"><h4>CANDIDATE</h4><F4CompareCol pl={compare} fixOf={fixOf} boot={boot} /></div>
+              <div className="col">
+                <h4>{duel ? "OPTION B" : "CANDIDATE"}</h4>
+                <F4CompareCol pl={right} fixOf={fixOf} boot={boot} />
+                {duel && <button className="btn btn-primary btn-sm" style={{ marginTop:12, width:'100%', justifyContent:'center' }} onClick={()=>onPick(right.id)}>Pick {right.name}</button>}
+              </div>
             </div>
           ) : (
             <React.Fragment>
@@ -2806,6 +2892,12 @@ function F4PickerModal({ pos, gw, current, players, teams, teamsById, isAvailabl
                   </select>
                 </div>
               </div>
+              {staged.length === 1 && !current && (
+                <div className="cmp-note">
+                  <span>Comparing <strong>{staged[0].name}</strong> — tap <em>Compare</em> on another player to see them side by side.</span>
+                  <button className="btn btn-ghost btn-sm" onClick={()=>setCmp([])}>Clear</button>
+                </div>
+              )}
               {candidates.length === 0 ? <div className="empty-mini">No available players match — they may already be used this season/half.</div> : candidates.slice(0, 120).map(pl => {
                 const st = statusInfo(pl);
                 return (
@@ -2816,7 +2908,9 @@ function F4PickerModal({ pos, gw, current, players, teams, teamsById, isAvailabl
                       <div className="pmeta">Fix <b>{fixOf(pl)}</b> · Form <b>{fmtNum(pl.form)}</b> · PPG <b>{fmtNum(pl.ppg)}</b> · Pts <b>{fmtNum(pl.pts)}</b> · TSB <b>{fmtTSB(pl.tsb)}</b></div>
                     </div>
                     <div className="pacts">
-                      <button className="btn btn-ghost btn-sm" onClick={()=>setCompareId(pl.id)}>Compare</button>
+                      <button className={"btn btn-sm " + (cmp.includes(pl.id) ? "btn-go" : "btn-ghost")} onClick={()=>toggleCmp(pl.id)}>
+                        {cmp.includes(pl.id) ? "✓ Comparing" : "Compare"}
+                      </button>
                       <button className="btn btn-primary btn-sm" onClick={()=>onPick(pl.id)}>Pick</button>
                     </div>
                   </div>
@@ -2827,10 +2921,10 @@ function F4PickerModal({ pos, gw, current, players, teams, teamsById, isAvailabl
           )}
         </div>
         <div className="modal-foot">
-          {compare ? (
+          {showCompare ? (
             <React.Fragment>
-              <button className="btn btn-ghost btn-sm" onClick={()=>setCompareId(null)}>Back to list</button>
-              <button className="btn btn-primary btn-sm" onClick={()=>onPick(compare.id)}>Swap to {compare.name}</button>
+              <button className="btn btn-ghost btn-sm" onClick={()=>setCmp([])}>← Back to list</button>
+              {!duel && <button className="btn btn-primary btn-sm" onClick={()=>onPick(right.id)}>{current ? "Swap to " : "Pick "}{right.name}</button>}
             </React.Fragment>
           ) : (
             <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
@@ -2843,6 +2937,7 @@ function F4PickerModal({ pos, gw, current, players, teams, teamsById, isAvailabl
 
 function SurvivorTab({ state, myPred, fpl, survivorRounds, updateMyPred, showToast }) {
   const boot = fpl.boot;
+  const svBonus = (state.scoring && state.scoring.survivorWinBonus != null) ? Number(state.scoring.survivorWinBonus) : 1;
   const me = myPred.name;
   if (!state.survivorEnabled) return <div className="empty"><div className="empty-title">SURVIVOR OFF</div><p>The survivor game isn't running right now.</p></div>;
   const active = activeSurvivorRound(survivorRounds);
@@ -2925,7 +3020,10 @@ function SurvivorTab({ state, myPred, fpl, survivorRounds, updateMyPred, showToa
   return (
     <div>
       {roundHead}
-      <p className="helper" style={{ marginBottom:12 }}>Pick one team to <strong>win</strong> GW{gw}. Win → you advance. Draw, loss or no pick → you're out. Each team is usable once per round.{topN.length ? <> The <strong>top {topN.length}</strong> can't be picked at all, and you can't pick the opponent of a bottom-3 side.</> : <> You cannot pick the opponent of a team in the bottom 3 of the league table or any club currently in the top 3 of the league table..</>}</p>
+      <p className="helper" style={{ marginBottom:12 }}>
+        Back one team to <strong>win</strong> GW{gw}. Survive a week <span className="pt-low">+1 pt</span>, win the round <span className="pt-high">+{svBonus} bonus</span>. Draw, loss or no pick and you're <span className="pt-pen">out</span>.
+        {" "}Each team once per round. Off limits: {topN.length ? <><span className="pt-bonus">top {topN.length}</span> and </> : null}anyone playing a <span className="pt-pen">bottom-3</span> club.
+      </p>
       {(topN.length > 0 || bottom3.length > 0) && (
         <div className="card" style={{ marginBottom:14, padding:'12px 14px', display:'grid', gap:10 }}>
           {topN.length > 0 && (
@@ -2950,10 +3048,15 @@ function SurvivorTab({ state, myPred, fpl, survivorRounds, updateMyPred, showToa
           const sel = myPick === t.short;
           return (
             <div key={t.short+t.ha} className={"team-chip" + (sel?" selected":"") + (disabled?" sv-disabled":"")} onClick={()=>choose(t.short)} title={fullName(t.short)}>
-              <TeamBadge short={t.short} code={boot&&boot.teams&&boot.teams[t.id]?boot.teams[t.id].code:null} boot={boot} size={20} />
+              <TeamBadge short={t.short} code={boot&&boot.teams&&boot.teams[t.id]?boot.teams[t.id].code:null} boot={boot} size={20} hideOnFail />
               <span style={{ marginLeft:6 }}>{t.short}</span>
-              <span className="uses" style={isBlocked && blocked[t.short].why==='top' ? { color:'var(--yellow)' } : null}>
-                {isBlocked ? blocked[t.short].label : isUsed ? "used" : (t.ha + " v " + t.opp)}
+              {/* Second line carries the opponent's crest too, so you can read the
+                  matchup at a glance without decoding three-letter codes. */}
+              <span className={"uses" + (isBlocked || isUsed ? "" : " sv-line")}
+                style={isBlocked && blocked[t.short].why==='top' ? { color:'var(--yellow)' } : null}>
+                {isBlocked ? blocked[t.short].label : isUsed ? "used" : (
+                  <>{t.ha} v <TeamBadge short={t.opp} boot={boot} size={14} hideOnFail />{t.opp}</>
+                )}
               </span>
             </div>
           );
@@ -3523,7 +3626,7 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
     ["scoreOutcome","Score · correct outcome"],["scoreExact","Score · exact result"],
     ["gfOutcome","Goal Fest · outcome bonus"],["gfExact","Goal Fest · exact bonus"],["gfThreshold","Goal Fest · total must exceed"],
     ["teamWin","Team · correct win"],["teamOverPenalty","Team · over-limit penalty"],["teamMaxUses","Team · max uses/season"],
-    ["f4Multiplier","F4 · points multiplier"],
+    ["f4Multiplier","F4 · points multiplier"],["f4MissPenalty","F4 · penalty for missing (0 = off)"],
   ];
 
   return (
