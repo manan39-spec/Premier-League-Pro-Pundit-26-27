@@ -7,6 +7,17 @@
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
 <title>Pro Pundit League — Premier League Prediction Game</title>
+<!-- Installable-app (PWA) wiring: home-screen icon, own window, no address bar.
+     Manifest + Apple meta tags only — no service worker, nothing to run server side. -->
+<link rel="manifest" href="/manifest.json" />
+<meta name="theme-color" content="#140d1f" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<meta name="apple-mobile-web-app-title" content="PPL" />
+<meta name="application-name" content="Pro Pundit League" />
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<link rel="icon" type="image/png" sizes="64x64" href="/icons/favicon-64.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter+Tight:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,700;9..144,900&display=swap" rel="stylesheet">
@@ -330,6 +341,47 @@
   .modal-head h3 { margin:0; font-family:'Anton'; font-size:22px; letter-spacing:0.02em; }
   .modal-body { padding:16px 20px; overflow:auto; -webkit-overflow-scrolling:touch; flex:1 1 auto; min-height:0; }
   .modal-foot { padding:14px 20px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:10px; flex:0 0 auto; }
+
+  /* ---- account panel: nickname + install-as-app -------------------------- */
+  .acct-id { display:flex; align-items:center; gap:12px; min-width:0; }
+  .acct-avatar { width:44px; height:44px; border-radius:50%; flex:0 0 auto; display:flex; align-items:center; justify-content:center;
+                 background:var(--card-2); border:1px solid var(--line-bright); font-size:20px; overflow:hidden; }
+  .acct-avatar img { width:100%; height:100%; object-fit:cover; }
+  .acct-name { font-family:'Anton'; font-size:20px; letter-spacing:0.02em; line-height:1.1; text-transform:uppercase;
+               white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .acct-mail { font-size:12px; color:var(--ink-mute); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .acct-card { border:1px solid var(--line); border-radius:10px; padding:14px; background:var(--bg-2); margin-bottom:14px; }
+  .acct-card:last-child { margin-bottom:0; }
+  .acct-card-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
+  .acct-card-title { display:flex; align-items:center; gap:8px; font-family:'Anton'; font-size:15px; letter-spacing:0.04em; text-transform:uppercase; }
+  .acct-note { font-size:11px; color:var(--ink-mute); font-family:'JetBrains Mono', monospace; }
+  .acct-row { display:flex; gap:8px; align-items:stretch; }
+  .acct-row input { flex:1 1 auto; min-width:0; background:var(--card); border:1px solid var(--line); color:var(--ink);
+                    padding:11px 14px; font-size:14px; border-radius:6px; outline:none; }
+  .acct-row input:focus { border-color:var(--accent); }
+  .btn-block { width:100%; justify-content:center; margin-top:10px; }
+  .btn-go { background:linear-gradient(135deg, #0f9d58, #00c46a); border-color:transparent; color:#fff; }
+  .btn-go:hover { filter:brightness(1.08); }
+  html.light .btn-go { background:linear-gradient(135deg, #06a35a, #0abf70); }
+  /* segmented iPhone / Android / Laptop switch */
+  .seg { display:inline-flex; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:3px; gap:2px; }
+  .seg button { font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:0.1em; text-transform:uppercase;
+                padding:7px 11px; border-radius:6px; color:var(--ink-mute); background:transparent; display:flex; align-items:center; gap:5px; }
+  .seg button.active { background:var(--purple); color:#fff; }
+  .acct-steps { margin:10px 0 0; padding-left:20px; }
+  .acct-steps li { font-size:13px; color:var(--ink-dim); line-height:1.7; }
+  .acct-steps li strong { color:var(--ink); }
+  .acct-ok { color:var(--accent-2); font-size:12.5px; margin-top:8px; }
+  .acct-err { color:var(--red); font-size:12.5px; margin-top:8px; line-height:1.6; }
+  .install-btn { position:relative; }
+  .install-btn.pulse::after { content:''; position:absolute; top:-2px; right:-2px; width:8px; height:8px; border-radius:50%;
+                              background:var(--accent-2); box-shadow:0 0 0 0 rgba(0,255,135,0.7); animation:instpulse 2.4s infinite; }
+  @keyframes instpulse { 0% { box-shadow:0 0 0 0 rgba(0,255,135,0.6); } 70% { box-shadow:0 0 0 7px rgba(0,255,135,0); } 100% { box-shadow:0 0 0 0 rgba(0,255,135,0); } }
+  /* the whole name pill is now the way into the account panel */
+  .user-pill.as-btn { cursor:pointer; background:transparent; transition:border-color 0.15s, color 0.15s; }
+  .user-pill.as-btn:hover { border-color:var(--accent); }
+  .user-pill .caret { color:var(--ink-mute); font-size:10px; padding-left:2px; }
+  @media (prefers-reduced-motion: reduce) { .install-btn.pulse::after { animation:none; } }
   .pk-controls { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
   .pk-controls .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .pk-input, .pk-select { width:100%; background:var(--bg-2); border:1px solid var(--line); color:var(--ink); padding:10px 12px; border-radius:6px; font-size:14px; }
@@ -745,6 +797,47 @@ async function fetchSession() {
 async function serverLogout() {
   try { await fetch(API_AUTH + '?logout=1', { method:'POST', credentials:'same-origin' }); } catch {}
 }
+// ============================================================
+// INSTALLABLE APP ("save as an app")
+// ============================================================
+// No service worker and no notifications — Chrome dropped the service-worker
+// requirement for installability, and iOS "Add to Home Screen" never needed one.
+// A web app manifest plus the Apple meta tags in <head> is the whole mechanism,
+// so this costs nothing to run and nothing to maintain.
+function isStandalone() {
+  try {
+    return window.matchMedia('(display-mode: standalone)').matches
+      || window.matchMedia('(display-mode: fullscreen)').matches
+      || window.navigator.standalone === true;   // older iOS
+  } catch (e) { return false; }
+}
+function isIOS() {
+  const ua = navigator.userAgent || '';
+  // iPadOS 13+ reports itself as a Mac, so the touch-point count is the tell.
+  return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+function isAndroid() { return /Android/i.test(navigator.userAgent || ''); }
+
+// Chrome and Edge fire this instead of showing their own install button. Holding
+// on to the event lets the account panel offer a real one-tap install; browsers
+// that don't fire it (Safari, Firefox) fall back to the written steps.
+const _installPrompt = { current: null };
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    _installPrompt.current = e;
+    window.dispatchEvent(new Event('ppl-installable'));
+  });
+}
+async function triggerInstall() {
+  const p = _installPrompt.current;
+  if (!p) return { ok:false, reason:'unavailable' };
+  p.prompt();
+  const res = await p.userChoice.catch(() => null);
+  _installPrompt.current = null;                       // the event is single-use
+  return { ok: !!(res && res.outcome === 'accepted'), outcome: res && res.outcome };
+}
+
 // Google Identity Services uses one global callback; dispatch to the active handler.
 const _gsiHandlerRef = { current: null };
 function _gsiCallback(resp) { const h = _gsiHandlerRef.current; if (h) h(resp); }
@@ -856,7 +949,7 @@ async function fplAllFixtures(force) {
 // Cloud console. This one is *meant* to be public (Google's own button needs
 // it client-side) — it is an identifier, not a secret.
 const GOOGLE_CLIENT_ID = "901965344611-g2cc7mpeqf1fj8pismatrrd4oer6nr1i.apps.googleusercontent.com";
-const APP_VERSION = 20260818;   // bump on every deploy — clients on an older build get flushed automatically
+const APP_VERSION = 20260820;   // bump on every deploy — clients on an older build get flushed automatically
 const TOTAL_GW = 38;
 const HALF_SPLIT = 19; // GW1-19 first half, GW20-38 second half
 const POSITIONS = ["GK", "DEF", "MID", "FWD"];
@@ -873,7 +966,7 @@ const DEFAULT_SCORING = {
 
 function defaultState() {
   return {
-    season: "2025/26",
+    season: "2026/27",
     activeGW: 1,
     openGWs: [1],           // gameweeks the admin has opened for predictions
     scoresPerGW: 5,
@@ -1359,6 +1452,24 @@ function App() {
   const [remoteAvailable, setRemoteAvailable] = useState(false);
   const [fplBusy, setFplBusy] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
+  // Installed-app state, kept up here so the header icon can reflect it.
+  const [appInstalled, setAppInstalled] = useState(() => isStandalone());
+  // Stop nudging once they've opened the panel — the hint is a prompt, not a nag.
+  const [installSeen, setInstallSeen] = useState(() => { try { return localStorage.getItem('pp_install_seen') === '1'; } catch (e) { return false; } });
+  const markInstallSeen = useCallback(() => {
+    setInstallSeen(true);
+    try { localStorage.setItem('pp_install_seen', '1'); } catch (e) {}
+  }, []);
+  useEffect(() => {
+    const onMode = () => setAppInstalled(isStandalone());
+    let mq = null;
+    try { mq = window.matchMedia('(display-mode: standalone)'); mq.addEventListener('change', onMode); } catch (e) {}
+    window.addEventListener('appinstalled', onMode);
+    return () => {
+      try { if (mq) mq.removeEventListener('change', onMode); } catch (e) {}
+      window.removeEventListener('appinstalled', onMode);
+    };
+  }, []);
 
   const [theme, setTheme] = useState(() => { try { return localStorage.getItem("pp_theme") === "light" ? "light" : "dark"; } catch { return "dark"; } });
   useEffect(() => { try { document.documentElement.classList.toggle("light", theme === "light"); } catch {} try { localStorage.setItem("pp_theme", theme); } catch {} }, [theme]);
@@ -1711,7 +1822,15 @@ function App() {
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
             <button className="theme-toggle" onClick={toggleTheme} title="Toggle day / night mode" aria-label="Toggle day or night mode">{theme==="light" ? "🌙" : "☀️"}</button>
-            <div className="user-pill"><span className="dot"></span><span>{user}</span><button onClick={()=>setShowAccount(true)}>account</button><button onClick={logout}>switch</button></div>
+            {/* Install shortcut. Hidden once the app is already running standalone,
+                because there is nothing left to install. */}
+            {!appInstalled && (
+              <button className={"theme-toggle install-btn" + (installSeen ? "" : " pulse")} onClick={()=>{ markInstallSeen(); setShowAccount('install'); }}
+                title="Save PPL as an app on this device" aria-label="Save as an app on this device">📲</button>
+            )}
+            <button className="user-pill as-btn" onClick={()=>setShowAccount(true)} title="Your account · nickname · save as an app">
+              <span className="dot"></span><span>{user}</span><span className="caret">▾</span>
+            </button>
           </div>
         </header>
         {/* The Admin item only renders for a server-verified admin email. Even if
@@ -1732,7 +1851,9 @@ function App() {
         </footer>
       </div>
       <BottomNav view={view} setView={setView} />
-      {showAccount && <Portal><AccountModal user={user} onClose={()=>setShowAccount(false)} changeDisplayName={changeDisplayName} showToast={showToast} myPred={myPred} /></Portal>}
+      {showAccount && <Portal><AccountModal user={user} onClose={()=>setShowAccount(false)} changeDisplayName={changeDisplayName}
+        showToast={showToast} myPred={myPred} session={session} onLogout={logout}
+        focus={showAccount === 'install' ? 'install' : null} appInstalled={appInstalled} /></Portal>}
       {toast && <div className="toast">{toast}</div>}
     </>
   );
@@ -1778,33 +1899,132 @@ function GoogleButton({ onCredential, text }) {
   return <div ref={ref} style={{ display:'flex', justifyContent:'center', minHeight:44 }} />;
 }
 
-function AccountModal({ user, onClose, changeDisplayName, showToast, myPred }) {
+function AccountModal({ user, onClose, changeDisplayName, showToast, myPred, session, onLogout, focus, appInstalled }) {
   const [nm, setNm] = useState(user || "");
   const [busy, setBusy] = useState(false); const [err, setErr] = useState("");
+  const email = (myPred && myPred.email) || (session && session.email) || "";
+  const googleName = (session && session.name) || "";
+
   const submit = async () => {
     setErr("");
     const clean = nm.trim();
-    if (!clean) { setErr("Enter a display name"); return; }
-    if (clean === user) { onClose(); return; }
+    if (!clean) { setErr("Enter a nickname"); return; }
+    if (clean === user) { showToast("That's already your nickname"); return; }
     setBusy(true);
     const r = await changeDisplayName(clean);
     setBusy(false);
-    if (r && r.ok) { showToast("Display name updated"); onClose(); }
-    else setErr((r && r.msg) || "Couldn't update name");
+    if (r && r.ok) showToast("Nickname updated");
+    else setErr((r && r.msg) || "Couldn't update nickname");
   };
+
+  // ---- install as app ----------------------------------------------------
+  const [tab, setTab] = useState(() => isIOS() ? "iphone" : isAndroid() ? "android" : "laptop");
+  const [canPrompt, setCanPrompt] = useState(!!_installPrompt.current);
+  useEffect(() => {
+    const on = () => setCanPrompt(true);
+    window.addEventListener('ppl-installable', on);
+    return () => window.removeEventListener('ppl-installable', on);
+  }, []);
+  const doInstall = async () => {
+    const r = await triggerInstall();
+    setCanPrompt(!!_installPrompt.current);
+    if (r.ok) showToast("Installing — look for PPL on your home screen");
+  };
+
+  // Opened from the header's install shortcut: scroll that card into view.
+  const installRef = useRef(null);
+  useEffect(() => {
+    if (focus === 'install' && installRef.current) {
+      try { installRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
+    }
+  }, [focus]);
+
+  const STEPS = {
+    iphone: [
+      <>Open this website in <strong>Safari</strong> on your iPhone.</>,
+      <>Tap the <strong>Share button</strong> (the square with an arrow pointing up).</>,
+      <>Scroll down and select <strong>"Add to Home Screen"</strong>.</>,
+      <>That's it — open <strong>PPL</strong> from your home screen like any other app.</>,
+    ],
+    android: [
+      <>Open this website in <strong>Chrome</strong> on your Android phone.</>,
+      <>Tap the <strong>3 dots menu</strong> in the top-right corner.</>,
+      <>Tap <strong>"Install app"</strong> or <strong>"Add to Home screen"</strong>.</>,
+      <>Open <strong>PPL</strong> from your app drawer or home screen.</>,
+    ],
+    laptop: [
+      <>Open this website in <strong>Chrome</strong> or <strong>Edge</strong>.</>,
+      <>Click the <strong>install icon</strong> in the address bar (a screen with a down arrow), or the <strong>3 dots menu → Cast, save and share → Install page as app</strong>.</>,
+      <>Confirm <strong>Install</strong>. PPL opens in its own window from then on.</>,
+      <>On a Mac, <strong>Safari</strong> works too: <strong>File → Add to Dock</strong>.</>,
+    ],
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth:440 }} onClick={e=>e.stopPropagation()}>
-        <div className="modal-head"><h3>Your account</h3><button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button></div>
-        <div className="modal-body">
-          <p className="helper" style={{ marginTop:0, marginBottom:14 }}>Signed in with Google{myPred && myPred.email ? <> as <strong style={{color:'var(--ink)'}}>{myPred.email}</strong></> : ""}.</p>
-          <div className="field"><label>Display name</label><input type="text" value={nm} onChange={e=>setNm(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="How you appear on the leaderboard" /></div>
-          <div className="helper">Changing this renames you everywhere — your picks and points come with you.</div>
-          {err && <div style={{ color:'var(--red)', fontSize:13, marginTop:8 }}>{err}</div>}
+      <div className="modal" style={{ maxWidth:520 }} onClick={e=>e.stopPropagation()}>
+        <div className="modal-head">
+          <div className="acct-id">
+            <div className="acct-avatar">👤</div>
+            <div style={{ minWidth:0 }}>
+              <div className="acct-name">{user}</div>
+              {email && <div className="acct-mail">{email}</div>}
+            </div>
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close">✕</button>
         </div>
-        <div className="modal-foot">
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary btn-sm" onClick={submit} disabled={busy}>{busy?"Saving…":"Save name"}</button>
+
+        <div className="modal-body">
+          {/* ---- nickname ---------------------------------------------- */}
+          <div className="acct-card">
+            <div className="acct-card-head">
+              <div className="acct-card-title"><span>🏷️</span> Manager nickname</div>
+              {googleName && <div className="acct-note">Google: {googleName}</div>}
+            </div>
+            <p className="helper" style={{ marginTop:0, marginBottom:10 }}>
+              Set the name shown on the leaderboard and the picks table. Your points and picks come with you.
+            </p>
+            <div className="acct-row">
+              <input type="text" value={nm} maxLength={30} onChange={e=>setNm(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="How you appear on the leaderboard" />
+              <button className="btn btn-go btn-sm" onClick={submit} disabled={busy} style={{ whiteSpace:'nowrap' }}>{busy?"Saving…":"Save"}</button>
+            </div>
+            {err && <div className="acct-err">{err}</div>}
+          </div>
+
+          {/* ---- install as app --------------------------------------- */}
+          <div className="acct-card" ref={installRef}>
+            <div className="acct-card-head">
+              <div className="acct-card-title"><span>📲</span> Save as an app</div>
+              <div className="seg">
+                <button className={tab==="iphone"?"active":""} onClick={()=>setTab("iphone")}>🍏 iPhone</button>
+                <button className={tab==="android"?"active":""} onClick={()=>setTab("android")}>🤖 Android</button>
+                <button className={tab==="laptop"?"active":""} onClick={()=>setTab("laptop")}>💻 Laptop</button>
+              </div>
+            </div>
+
+            {appInstalled ? (
+              <div className="acct-ok" style={{ marginTop:2 }}>✓ You're already running PPL as an installed app on this device.</div>
+            ) : (
+              <>
+                <p className="helper" style={{ marginTop:0, marginBottom:0 }}>
+                  Its own icon on your home screen, opens full screen with no address bar, and remembers you're signed in. Takes about ten seconds.
+                </p>
+                {canPrompt && tab !== "iphone" && (
+                  <button className="btn btn-go btn-block" onClick={doInstall}>⬇️ Install PPL on this device</button>
+                )}
+                <ol className="acct-steps">
+                  {STEPS[tab].map((s, i) => <li key={i}>{s}</li>)}
+                </ol>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="modal-foot" style={{ justifyContent:'space-between' }}>
+          <button className="btn btn-ghost btn-sm" style={{ color:'var(--red)', borderColor:'transparent' }}
+            onClick={()=>{ onClose(); onLogout(); }}>🚪 Log out</button>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>Close</button>
         </div>
       </div>
     </div>
@@ -2529,16 +2749,61 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
     };
   }, [flush]);
 
+  // ---- auto-advance ------------------------------------------------------
+  // Typing a digit hops you straight to the next box, so a full gameweek is ten
+  // keystrokes instead of ten keystrokes plus ten taps. Two-digit scores are
+  // still reachable: the jump only fires when a box goes from EMPTY to one
+  // digit, so you can tap back in and type the second digit.
+  const inputsRef = useRef({});
+  const fieldKey = (fid, which) => `${fid}:${which}`;
+  const fieldOrder = useMemo(() => {
+    const o = [];
+    selected.forEach(f => { o.push(fieldKey(f.id, 0)); o.push(fieldKey(f.id, 1)); });
+    return o;
+  }, [selected]);
+  const focusField = (key) => {
+    const el = inputsRef.current[key];
+    if (!el || el.disabled) return false;
+    el.focus();
+    try { el.select(); } catch (e) {}   // typing then replaces instead of appending
+    return true;
+  };
+  const step = (fid, which, dir) => {
+    const i = fieldOrder.indexOf(fieldKey(fid, which));
+    if (i < 0) return;
+    const target = fieldOrder[i + dir];
+    if (target) focusField(target);
+    else if (dir > 0) {
+      // Last box on the page — drop the phone keypad rather than trapping focus.
+      const el = inputsRef.current[fieldOrder[i]];
+      if (el) el.blur();
+    }
+  };
+  // Enter goes forward; backspace in an already-empty box goes back. Tab and the
+  // arrow keys are left alone so editing a two-digit score still behaves.
+  const onKeyNav = (fid, which) => (e) => {
+    if (e.key === "Enter") { e.preventDefault(); step(fid, which, +1); }
+    else if (e.key === "Backspace" && !e.currentTarget.value) { e.preventDefault(); step(fid, which, -1); }
+  };
+
   const setHalf = (fid, which, val) => {
     if (locked) { showToast("Gameweek locked"); return; }
     const v = val.replace(/[^0-9]/g, "").slice(0,2);
     const cur = (draft[fid] || "").split("-");
+    const prev = cur[which] || "";
     const next = which === 0 ? `${v}-${cur[1]||""}` : `${cur[0]||""}-${v}`;
     const updated = { ...draft, [fid]: next };
     setDraft(updated);                            // instant
     pendingRef.current = updated;
     if (flushRef.current) clearTimeout(flushRef.current);
     flushRef.current = setTimeout(flush, 600);    // save shortly after you stop typing
+    // Hop forward when the box now holds a single digit AND that digit was typed
+    // rather than deleted. `prev.length <= 1` is what separates the two:
+    //   ""   -> "1"   fresh entry            -> advance
+    //   "3"  -> "1"   overtyped a selection  -> advance
+    //   "12" -> "1"   a backspace            -> stay put
+    //   "1"  -> "10"  building a two-digit    -> stay put (length is 2)
+    if (v.length === 1 && prev.length <= 1) step(fid, which, +1);
   };
   const clearAll = () => {
     if (locked) { showToast("Gameweek locked"); return; }
@@ -2586,9 +2851,24 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
             <div className="fixture-body">
               <div className="fx-team home" style={{ display:'flex', alignItems:'center', gap:8, justifyContent:'flex-end' }}><span className="fx-nm"><span className="nm-full">{fullName(f.teamH, f.teamHId)}</span><span className="nm-short">{f.teamH}</span></span><TeamBadge short={f.teamH} code={boot&&boot.teams&&boot.teams[f.teamHId]?boot.teams[f.teamHId].code:null} boot={boot} size={22} /></div>
               <div className="fx-score-in">
-                <input type="number" min="0" max="20" value={parts[0]||""} disabled={locked} onChange={e=>setHalf(f.id,0,e.target.value)} />
+                {/* type="text" + inputMode="numeric", NOT type="number". The phone
+                    keypad is the same either way, but a number input refuses
+                    select()/setSelectionRange, so re-typing over an existing digit
+                    appended to it instead of replacing it. Digits are enforced in
+                    setHalf anyway. */}
+                <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2} autoComplete="off"
+                  aria-label={`${f.teamH} goals`} value={parts[0]||""} disabled={locked}
+                  ref={el=>{ if (el) inputsRef.current[fieldKey(f.id,0)] = el; else delete inputsRef.current[fieldKey(f.id,0)]; }}
+                  onFocus={e=>{ try { e.target.select(); } catch (err) {} }}
+                  onKeyDown={onKeyNav(f.id,0)}
+                  onChange={e=>setHalf(f.id,0,e.target.value)} />
                 <span className="fx-dash">–</span>
-                <input type="number" min="0" max="20" value={parts[1]||""} disabled={locked} onChange={e=>setHalf(f.id,1,e.target.value)} />
+                <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2} autoComplete="off"
+                  aria-label={`${f.teamA} goals`} value={parts[1]||""} disabled={locked}
+                  ref={el=>{ if (el) inputsRef.current[fieldKey(f.id,1)] = el; else delete inputsRef.current[fieldKey(f.id,1)]; }}
+                  onFocus={e=>{ try { e.target.select(); } catch (err) {} }}
+                  onKeyDown={onKeyNav(f.id,1)}
+                  onChange={e=>setHalf(f.id,1,e.target.value)} />
               </div>
               <div className="fx-team" style={{ display:'flex', alignItems:'center', gap:8, justifyContent:'flex-start' }}><TeamBadge short={f.teamA} code={boot&&boot.teams&&boot.teams[f.teamAId]?boot.teams[f.teamAId].code:null} boot={boot} size={22} /><span className="fx-nm"><span className="nm-full">{fullName(f.teamA, f.teamAId)}</span><span className="nm-short">{f.teamA}</span></span></div>
             </div>
