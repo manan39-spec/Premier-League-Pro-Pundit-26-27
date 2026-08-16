@@ -949,7 +949,7 @@ async function fplAllFixtures(force) {
 // Cloud console. This one is *meant* to be public (Google's own button needs
 // it client-side) — it is an identifier, not a secret.
 const GOOGLE_CLIENT_ID = "901965344611-g2cc7mpeqf1fj8pismatrrd4oer6nr1i.apps.googleusercontent.com";
-const APP_VERSION = 20260820;   // bump on every deploy — clients on an older build get flushed automatically
+const APP_VERSION = 20260821;   // bump on every deploy — clients on an older build get flushed automatically
 const TOTAL_GW = 38;
 const HALF_SPLIT = 19; // GW1-19 first half, GW20-38 second half
 const POSITIONS = ["GK", "DEF", "MID", "FWD"];
@@ -2754,6 +2754,10 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
   // keystrokes instead of ten keystrokes plus ten taps. Two-digit scores are
   // still reachable: the jump only fires when a box goes from EMPTY to one
   // digit, so you can tap back in and type the second digit.
+  // What kind of edit was this? The browser says so via InputEvent.inputType
+  // ("insertText", "deleteContentBackward", "insertFromPaste", ...). Returned raw
+  // so setHalf can fall back to a length comparison on engines that omit it.
+  const editKind = (e) => (e && e.nativeEvent && e.nativeEvent.inputType) || "";
   const inputsRef = useRef({});
   const fieldKey = (fid, which) => `${fid}:${which}`;
   const fieldOrder = useMemo(() => {
@@ -2784,9 +2788,26 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
   const onKeyNav = (fid, which) => (e) => {
     if (e.key === "Enter") { e.preventDefault(); step(fid, which, +1); }
     else if (e.key === "Backspace" && !e.currentTarget.value) { e.preventDefault(); step(fid, which, -1); }
+    else if (/^[0-9]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      // A digit ALWAYS replaces this box and hops forward — one box, one number.
+      //
+      // Earlier versions inferred that from the selection and from React's change
+      // event, and both let you down. React fires no change event when the value
+      // doesn't change, so re-typing the 3 you already had was silently swallowed;
+      // and if the box already had focus there was no selection to overwrite, so
+      // typing appended ("1" became "11") instead of replacing. Handling the
+      // keystroke outright removes both failure modes and makes every box behave
+      // identically whether it's empty, filled, focused or not.
+      //
+      // The trade: you can't type a 10+ scoreline any more. No Premier League side
+      // has ever scored 10 in a match, and pasting still accepts two digits, so
+      // this buys reliable editing very cheaply.
+      e.preventDefault();
+      setHalf(fid, which, e.key, "insertText");
+    }
   };
 
-  const setHalf = (fid, which, val) => {
+  const setHalf = (fid, which, val, inputType) => {
     if (locked) { showToast("Gameweek locked"); return; }
     const v = val.replace(/[^0-9]/g, "").slice(0,2);
     const cur = (draft[fid] || "").split("-");
@@ -2797,13 +2818,17 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
     pendingRef.current = updated;
     if (flushRef.current) clearTimeout(flushRef.current);
     flushRef.current = setTimeout(flush, 600);    // save shortly after you stop typing
-    // Hop forward when the box now holds a single digit AND that digit was typed
-    // rather than deleted. `prev.length <= 1` is what separates the two:
-    //   ""   -> "1"   fresh entry            -> advance
-    //   "3"  -> "1"   overtyped a selection  -> advance
-    //   "12" -> "1"   a backspace            -> stay put
-    //   "1"  -> "10"  building a two-digit    -> stay put (length is 2)
-    if (v.length === 1 && prev.length <= 1) step(fid, which, +1);
+    // Hop forward when the box now holds a single digit that was TYPED rather
+    // than deleted. Comparing lengths isn't enough — "70" -> "7" is a backspace
+    // or an overtype depending on what the user did, and only the browser knows
+    // which. `inserted` carries that answer through from the input event.
+    //   ""   -> "1"   typed          -> advance
+    //   "3"  -> "1"   overtyped      -> advance
+    //   "70" -> "7"   overtyped      -> advance
+    //   "70" -> "7"   backspaced     -> stay put
+    //   "1"  -> "10"  second digit   -> stay put (length is 2)
+    const inserted = inputType ? /^insert/.test(inputType) : (v.length >= prev.length);
+    if (v.length === 1 && inserted) step(fid, which, +1);
   };
   const clearAll = () => {
     if (locked) { showToast("Gameweek locked"); return; }
@@ -2861,14 +2886,14 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
                   ref={el=>{ if (el) inputsRef.current[fieldKey(f.id,0)] = el; else delete inputsRef.current[fieldKey(f.id,0)]; }}
                   onFocus={e=>{ try { e.target.select(); } catch (err) {} }}
                   onKeyDown={onKeyNav(f.id,0)}
-                  onChange={e=>setHalf(f.id,0,e.target.value)} />
+                  onChange={e=>setHalf(f.id,0,e.target.value,editKind(e))} />
                 <span className="fx-dash">–</span>
                 <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2} autoComplete="off"
                   aria-label={`${f.teamA} goals`} value={parts[1]||""} disabled={locked}
                   ref={el=>{ if (el) inputsRef.current[fieldKey(f.id,1)] = el; else delete inputsRef.current[fieldKey(f.id,1)]; }}
                   onFocus={e=>{ try { e.target.select(); } catch (err) {} }}
                   onKeyDown={onKeyNav(f.id,1)}
-                  onChange={e=>setHalf(f.id,1,e.target.value)} />
+                  onChange={e=>setHalf(f.id,1,e.target.value,editKind(e))} />
               </div>
               <div className="fx-team" style={{ display:'flex', alignItems:'center', gap:8, justifyContent:'flex-start' }}><TeamBadge short={f.teamA} code={boot&&boot.teams&&boot.teams[f.teamAId]?boot.teams[f.teamAId].code:null} boot={boot} size={22} /><span className="fx-nm"><span className="nm-full">{fullName(f.teamA, f.teamAId)}</span><span className="nm-short">{f.teamA}</span></span></div>
             </div>
