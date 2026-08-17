@@ -949,7 +949,7 @@ async function fplAllFixtures(force) {
 // Cloud console. This one is *meant* to be public (Google's own button needs
 // it client-side) — it is an identifier, not a secret.
 const GOOGLE_CLIENT_ID = "901965344611-g2cc7mpeqf1fj8pismatrrd4oer6nr1i.apps.googleusercontent.com";
-const APP_VERSION = 20260821;   // bump on every deploy — clients on an older build get flushed automatically
+const APP_VERSION = 20260822;   // bump on every deploy — clients on an older build get flushed automatically
 const TOTAL_GW = 38;
 const HALF_SPLIT = 19; // GW1-19 first half, GW20-38 second half
 const POSITIONS = ["GK", "DEF", "MID", "FWD"];
@@ -961,6 +961,7 @@ const DEFAULT_SCORING = {
   teamWin: 3, teamOverPenalty: 1, teamMaxUses: 2,
   f4Multiplier: 1,
   f4MissPenalty: 5,      // deducted if the deadline passes with an empty Fantastic Four
+  scoresMissPenalty: 1,  // deducted if the deadline passes with NO scoreline predicted at all
   survivorWinBonus: 1,   // points for winning a survivor round (admin-configurable)
 };
 
@@ -1103,6 +1104,16 @@ function gwLocked(state, fpl, gw, now) {
 // Has this Fantastic Four actually been filled in at all?
 function f4Submitted(f4) { return !!(f4 && (f4.gk || f4.def || f4.mid || f4.fwd)); }
 
+// Did this pundit predict ANY of the gameweek's scorelines? A partial slate is
+// fine — one score out of five is enough to avoid the missed-deadline penalty.
+// It has to be a COMPLETE score though: a stray "3-" isn't a prediction, scores
+// nothing, and shouldn't shield anyone from the penalty.
+function anyScoreSubmitted(pred, state, gw) {
+  const selIds = (state.selectedFixtures && state.selectedFixtures[gw]) || [];
+  const preds = (pred && pred.scores && pred.scores[gw]) || {};
+  return selIds.some(fid => parseScore(preds[fid]) !== null);
+}
+
 // The first gameweek a pundit can be held responsible for. Someone who joins in
 // GW10 must not collect nine missed-F4 penalties for weeks they weren't here.
 // Prefers their join timestamp; legacy records with no timestamp fall back to
@@ -1126,8 +1137,9 @@ function computeUserSeason(pred, state, fpl, maxGWOverride) {
   const bd = { scores: 0, f4: 0 };
   const perGW = {};
   const maxGW = (maxGWOverride != null) ? maxGWOverride : (state.activeGW || 1);
-  const penalty = Number(cfg.f4MissPenalty) || 0;
-  const accountableFrom = penalty > 0 ? firstAccountableGW(pred, fpl) : Infinity;
+  const f4Pen = Number(cfg.f4MissPenalty) || 0;
+  const scPen = Number(cfg.scoresMissPenalty) || 0;
+  const accountableFrom = (f4Pen > 0 || scPen > 0) ? firstAccountableGW(pred, fpl) : Infinity;
   for (let gw = 1; gw <= maxGW; gw++) {
     const gwFx = (fpl.fixturesByGW && fpl.fixturesByGW[gw]) || [];
     const live = (fpl.liveByGW && fpl.liveByGW[gw]) || {};
@@ -1138,9 +1150,16 @@ function computeUserSeason(pred, state, fpl, maxGWOverride) {
       const fx = gwFx.find(f => String(f.id) === String(fid));
       if (fx) sPts += scoreFixturePoints(preds[fid], fx, cfg);
     });
+    // Missed the deadline without predicting a single scoreline -> penalty.
+    // selIds.length guards the case where the admin never set fixtures: there
+    // was nothing to predict, so nobody can be punished for not predicting it.
+    if (scPen > 0 && selIds.length && gw >= accountableFrom
+        && gwLocked(state, fpl, gw) && !anyScoreSubmitted(pred, state, gw)) {
+      sPts -= scPen;
+    }
     const f4 = (pred.f4 && pred.f4[gw]) || null;
     if (f4Submitted(f4)) fPts += f4Points(f4, live, cfg);
-    else if (penalty > 0 && gw >= accountableFrom && gwLocked(state, fpl, gw)) fPts -= penalty;
+    else if (f4Pen > 0 && gw >= accountableFrom && gwLocked(state, fpl, gw)) fPts -= f4Pen;
     bd.scores += sPts; bd.f4 += fPts;
     if (sPts || fPts) perGW[gw] = { scores: sPts, f4: fPts, total: sPts + fPts };
   }
@@ -1514,6 +1533,7 @@ function App() {
     if (!Array.isArray(s.survivorRounds)) { s.survivorRounds = []; save = true; }
     if (s.scoring && s.scoring.survivorWinBonus === undefined) { s.scoring.survivorWinBonus = 1; save = true; }
     if (s.scoring && s.scoring.f4MissPenalty === undefined) { s.scoring.f4MissPenalty = 5; save = true; }
+    if (s.scoring && s.scoring.scoresMissPenalty === undefined) { s.scoring.scoresMissPenalty = 1; save = true; }
     if (s.survivorBlockTop === undefined) { s.survivorBlockTop = 3; save = true; }   // top-3 clubs off-limits in survivor
     if (!s.activeGW) { s.activeGW = 1; save = true; }
     if (!s.openGWs || !s.openGWs.length) { s.openGWs = [s.activeGW || 1]; save = true; }
@@ -1818,7 +1838,7 @@ function App() {
         <header className="top">
           <div className="brand">
             <div className="brand-mark">PRO <span className="accent">PUNDIT</span> LEAGUE</div>
-            <div className="brand-sub">Season 7 · {state.season} · Premier League</div>
+            <div className="brand-sub">Season 6 · {state.season} · Premier League</div>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
             <button className="theme-toggle" onClick={toggleTheme} title="Toggle day / night mode" aria-label="Toggle day or night mode">{theme==="light" ? "🌙" : "☀️"}</button>
@@ -1846,7 +1866,7 @@ function App() {
         {view==="admin" && <AdminView state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} isAdmin={isAdmin} adminEmail={session.email} showToast={showToast} onRefresh={()=>refreshAll(true)} adminAddUser={adminAddUser} adminDeleteUser={adminDeleteUser} setSurvivorOn={setSurvivorOn} />}
 
         <footer className="app-footer">
-          Pro Pundit League · <span className="accent">Season 7</span> · Put those pundit hats on
+          Pro Pundit League · <span className="accent">Season 6</span> · Put those pundit hats on
           <div>© {new Date().getFullYear()} Pro Pundit League</div>
         </footer>
       </div>
@@ -2059,7 +2079,7 @@ function LoginView({ onLogin, remoteAvailable }) {
     <div className="app">
       <div className="login-wrap">
         <div className="login-card">
-          <div className="eyebrow">PREMIER LEAGUE · {new Date().getFullYear()} · Season 7</div>
+          <div className="eyebrow">PREMIER LEAGUE · {new Date().getFullYear()} · SEASON 6</div>
           <div className="login-title">PRO <span className="it">pundit.</span></div>
           <p className="login-sub">
             {step === "google" && <>Welcome to the sixth season of Pro Pundit. Sign in with Google to make your picks — score predictions, Survivor and the Fantastic Four await.</>}
@@ -2089,7 +2109,7 @@ function LoginView({ onLogin, remoteAvailable }) {
               <button className="btn btn-primary" onClick={finishName} disabled={busy} style={{ width:'100%', justifyContent:'center', padding:'14px' }}>{busy?"Setting up…":"Enter the league →"}</button>
             </>
           )}
-          <div className="login-footer">Pro Pundit League · <span className="accent">Season 7</span><div>© {new Date().getFullYear()} Pro Pundit League</div></div>
+          <div className="login-footer">Pro Pundit League · <span className="accent">Season 6</span><div>© {new Date().getFullYear()} Pro Pundit League</div></div>
         </div>
       </div>
     </div>
@@ -2226,6 +2246,7 @@ function RulesView({ state }) {
   const sc = state.scoring || DEFAULT_SCORING;
   const blockTop = (state.survivorBlockTop != null) ? Number(state.survivorBlockTop) : 3;
   const f4Pen = Number(sc.f4MissPenalty) || 0;
+  const scPen = Number(sc.scoresMissPenalty) || 0;
   return (
     <div>
       <div className="page-head">
@@ -2247,6 +2268,15 @@ function RulesView({ state }) {
             </p>
             <p style={{ color:'var(--ink-mute)', fontSize:12, lineHeight:1.5, marginTop:8 }}>e.g. predict 4-1: if it ends 4-2 you get <span className="pt-bonus">{sc.scoreOutcome + sc.gfOutcome}</span>; if it ends 4-1 you get <span className="pt-bonus">{sc.scoreExact + sc.gfExact}</span>.</p>
           </div>
+          {scPen > 0 && (
+            <div style={{ marginTop:14, padding:'12px 14px', background:'var(--bg-2)', border:'1px solid rgba(255,77,77,0.35)', borderRadius:6 }}>
+              <div style={{ fontFamily:'Anton', fontSize:16, color:'var(--red)', letterSpacing:'0.04em' }}>⚠️ TURN UP OR LOSE A POINT</div>
+              <p style={{ color:'var(--ink-dim)', fontSize:13, lineHeight:1.6, marginTop:8 }}>
+                Let the deadline pass without predicting a <strong style={{color:'var(--ink)'}}>single</strong> scoreline and you take <span className="pt-pen">−{scPen} pt</span> for that gameweek.
+                A <strong style={{color:'var(--ink)'}}>partial slate is fine</strong> — one score out of {state.scoresPerGW} is enough to avoid it. Only a completely blank week is punished.
+              </p>
+            </div>
+          )}
         </div>
         <div className="card">
           <div className="card-title">2 · Survivor</div>
@@ -2840,6 +2870,11 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
   };
   const preds = draft;
   const hasAny = selected.some(f => (preds[f.id] || "").replace("-","").trim() !== "");
+  const scPen = Number(sc.scoresMissPenalty) || 0;
+  // A blank slate once the week is locked IS the penalty — say so here so this
+  // page and the leaderboard can't appear to disagree.
+  const missedAll = locked && scPen > 0 && selected.length > 0
+    && !selected.some(f => parseScore(preds[f.id]) !== null);
   const statusText = saveState === "saving" ? "Saving…"
     : saveState === "error" ? "⚠️ Not saved — check your connection"
     : saveState === "saved" ? "✓ All picks saved" : "";
@@ -2850,12 +2885,13 @@ function ScoresTab({ state, gw, locked, fixtures, boot, myPred, updateMyPred, sh
   }
   return (
     <div>
-      {locked && <div className="lock-banner">🔒 Score predictions for GW{gw} are locked.</div>}
+      {locked && <div className="lock-banner">🔒 Score predictions for GW{gw} are locked.{missedAll ? <> Nothing was submitted — <span className="pt-pen">−{scPen} pt</span>.</> : null}</div>}
       <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:12, flexWrap:'wrap', marginBottom:16 }}>
         <p className="helper" style={{ margin:0, flex:'1 1 320px' }}>
           Right result <span className="pt-low">{sc.scoreOutcome} pt</span> · exact score <span className="pt-high">{sc.scoreExact} pts</span>.
           {" "}<span className="pt-bonus">⚡ Goal Fest</span> — predict over {sc.gfThreshold} total goals and if the real game also goes over,
           add <span className="pt-bonus">+{sc.gfOutcome}</span> on a right result or <span className="pt-bonus">+{sc.gfExact}</span> on an exact score.
+          {scPen > 0 ? <> Miss the deadline with none of them filled in and it's <span className="pt-pen">−{scPen} pt</span> — even one score avoids that.</> : null}
         </p>
         {!locked && statusText && (
           <span style={{ fontFamily:'JetBrains Mono, monospace', fontSize:11, letterSpacing:'0.08em', color:statusColor, whiteSpace:'nowrap' }}>{statusText}</span>
@@ -3824,6 +3860,7 @@ function AdminDashboard({ state, users, standings, fpl, updateState, showToast, 
     ["gfOutcome","Goal Fest · outcome bonus"],["gfExact","Goal Fest · exact bonus"],["gfThreshold","Goal Fest · total must exceed"],
     ["teamWin","Team · correct win"],["teamOverPenalty","Team · over-limit penalty"],["teamMaxUses","Team · max uses/season"],
     ["f4Multiplier","F4 · points multiplier"],["f4MissPenalty","F4 · penalty for missing (0 = off)"],
+    ["scoresMissPenalty","Scoreline · penalty for missing (0 = off)"],
   ];
 
   return (
