@@ -1838,7 +1838,7 @@ function App() {
         <header className="top">
           <div className="brand">
             <div className="brand-mark">PRO <span className="accent">PUNDIT</span> LEAGUE</div>
-            <div className="brand-sub">Season 6 · {state.season} · Premier League</div>
+            <div className="brand-sub">Season 7 · {state.season} · Premier League</div>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
             <button className="theme-toggle" onClick={toggleTheme} title="Toggle day / night mode" aria-label="Toggle day or night mode">{theme==="light" ? "🌙" : "☀️"}</button>
@@ -1866,7 +1866,7 @@ function App() {
         {view==="admin" && <AdminView state={state} users={users} standings={standings} fpl={fpl} updateState={updateState} isAdmin={isAdmin} adminEmail={session.email} showToast={showToast} onRefresh={()=>refreshAll(true)} adminAddUser={adminAddUser} adminDeleteUser={adminDeleteUser} setSurvivorOn={setSurvivorOn} />}
 
         <footer className="app-footer">
-          Pro Pundit League · <span className="accent">Season 6</span> · Put those pundit hats on
+          Pro Pundit League · <span className="accent">Season 7</span> · Put those pundit hats on
           <div>© {new Date().getFullYear()} Pro Pundit League</div>
         </footer>
       </div>
@@ -2079,7 +2079,7 @@ function LoginView({ onLogin, remoteAvailable }) {
     <div className="app">
       <div className="login-wrap">
         <div className="login-card">
-          <div className="eyebrow">PREMIER LEAGUE · {new Date().getFullYear()} · SEASON 6</div>
+          <div className="eyebrow">PREMIER LEAGUE · {new Date().getFullYear()} · Season 7</div>
           <div className="login-title">PRO <span className="it">pundit.</span></div>
           <p className="login-sub">
             {step === "google" && <>Welcome to the sixth season of Pro Pundit. Sign in with Google to make your picks — score predictions, Survivor and the Fantastic Four await.</>}
@@ -2109,7 +2109,7 @@ function LoginView({ onLogin, remoteAvailable }) {
               <button className="btn btn-primary" onClick={finishName} disabled={busy} style={{ width:'100%', justifyContent:'center', padding:'14px' }}>{busy?"Setting up…":"Enter the league →"}</button>
             </>
           )}
-          <div className="login-footer">Pro Pundit League · <span className="accent">Season 6</span><div>© {new Date().getFullYear()} Pro Pundit League</div></div>
+          <div className="login-footer">Pro Pundit League · <span className="accent">Season 7</span><div>© {new Date().getFullYear()} Pro Pundit League</div></div>
         </div>
       </div>
     </div>
